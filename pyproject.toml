@@ -1,0 +1,80 @@
+[build-system]
+requires = [
+    "setuptools",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "media_conveyor"
+description = "A tool for creating a Redis Elasticache db of local media content on AWS as well as a web interface which users can download the displayed media"
+version = '0.0.1'
+requires-python = ">=3.7"
+dependencies = [
+    "plexapi",
+    "json5",
+    "redis"
+]
+
+[project.scripts]
+db = "media_conveyor.main:main"
+testing = "media_conveyor.main:test_db"
+plex = "media_conveyor.plex_test:main"
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+]
+
+[tool.ruff]
+# Exclude a variety of commonly ignored directories.
+exclude = [
+    ".bzr",
+    ".cache",
+    ".direnv",
+    ".eggs",
+    "*.egg-info",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    "*.pyc",
+    "__pycache__",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "venv",
+    ".code-workspace"
+]
+select = ["B", "C", "E", "F", "N", "W", "B9"]
+ignore = [
+    "E203",
+    "E501",
+    "E722",
+    "N802",
+    "F401"
+]
+line-length = 88
+
+
+[tool.setuptools]
+# ...
+# By default, include-package-data is true in pyproject.toml, so you do
+# NOT have to specify this line.
+include-package-data = true
+
+[tool.setuptools.packages.find]
+# scanning for namespace packages is true by default in pyproject.toml, so
+# you need NOT include the following line.
+namespaces = true
+where = ["src"]
+
