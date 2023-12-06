@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import json5 as json
 from redis import Redis
 
 # Used for type-hinting
@@ -23,8 +22,8 @@ class RedisDB:
 
 
 class RedisPlexDB(RedisDB):
-    # TODO Need to find a way to update the db.  The main point is to remove
-    # any missing items from the incoming db
+    # TODO Is there a need to refresh the database?  If so then I need to develop a
+    # method for removing Plex entries that don't exist any longer
     def __init__(
         self: RedisDB,
         plex_db: dict,
@@ -40,5 +39,4 @@ class RedisPlexDB(RedisDB):
             for key_id, value_data in self.plex_db.items():
                 pipe.hmset(key_id, value_data)
             pipe.execute()
-        self.redis.bgsave()
         self.redis.bgsave()

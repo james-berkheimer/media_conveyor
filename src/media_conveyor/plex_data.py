@@ -49,8 +49,7 @@ class PlexData(PlexServer):
         db = {}
         pattern = re.compile(r"[^a-zA-Z0-9]")
         for movie in self.movies:
-            # Verify data exists.  If not provide an empty string
-            # which will be an acceptible value for Redis
+            # Verify data exists.
             movie_title = movie.title or "NONE"
             movie_year = movie.year or "NONE"
             movie_thumb = movie.thumb or "NONE"
@@ -73,8 +72,7 @@ class PlexData(PlexServer):
         shows_db = {}
         pattern = re.compile(r"[^a-zA-Z0-9]")
         for show in self.shows:
-            # Verify data exists.  If not provide an empty string
-            # which will be an acceptible value for Redis
+            # Verify data exists.
             show_name = pattern.sub("", show.title).strip()
             show_title = show.title or "NONE"
             show_year = show.year or "NONE"
@@ -90,8 +88,7 @@ class PlexData(PlexServer):
         return shows_db
 
     def _get_episodes(self, show) -> str:
-        # Verify data exists.  If not provide an empty string
-        # which will be an acceptible value for Redis
+        # Verify data exists.
         if show.seasons():
             episode_db = {}
             for season in show.seasons():
@@ -110,8 +107,7 @@ class PlexData(PlexServer):
         music_db = {}
         pattern = re.compile(r"[^a-zA-Z0-9]")
         for artist in self.music:
-            # Verify data exists.  If not provide an empty string
-            # which will be an acceptible value for Redis
+            # Verify data exists.
             artist_title = artist.title or "NONE"
             artist_thumb = artist.thumb or "NONE"
             artist_name = pattern.sub("", artist_title).strip()
@@ -128,8 +124,7 @@ class PlexData(PlexServer):
             track_db = {}
             for album in artist.albums():
                 for track in album.tracks():
-                    # Verify data exists.  If not provide an empty string
-                    # which will be an acceptible value for Redis
+                    # Verify data exists.
                     track_number = track.trackNumber or "NONE"
                     track_name = track.title or "NONE"
                     track_location = track.locations or "NONE"
