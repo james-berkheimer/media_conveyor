@@ -4,6 +4,10 @@ requires = [
 ]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools_scm]
+write_to = "media_conveyor/version.py"
+version_scheme = "release-branch-semver"
+
 [project]
 name = "media_conveyor"
 description = "A tool for creating a Redis Elasticache db of local media content on AWS as well as a web interface which users can download the displayed media"
