@@ -12,7 +12,7 @@ version_scheme = "release-branch-semver"
 name = "media_conveyor"
 description = "A tool for creating a Redis Elasticache db of local media content on AWS as well as a web interface which users can download the displayed media"
 authors = [{name = "James Berkheirmrt", email = "james.berkheimer@gmail.com"}]
-license = "MIT"
+license = {text = "MIT"}
 dynamic = ["version"]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -92,17 +92,3 @@ ignore = [
     "F401"
 ]
 line-length = 88
-
-
-[tool.setuptools]
-# ...
-# By default, include-package-data is true in pyproject.toml, so you do
-# NOT have to specify this line.
-include-package-data = true
-
-[tool.setuptools.packages.find]
-# scanning for namespace packages is true by default in pyproject.toml, so
-# you need NOT include the following line.
-namespaces = true
-where = ["src"]
-
