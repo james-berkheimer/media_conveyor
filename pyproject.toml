@@ -11,13 +11,24 @@ version_scheme = "release-branch-semver"
 [project]
 name = "media_conveyor"
 description = "A tool for creating a Redis Elasticache db of local media content on AWS as well as a web interface which users can download the displayed media"
-version = '0.0.1'
+authors = [{name = "James Berkheirmrt", email = "james.berkheimer@gmail.com"}]
+license = "MIT"
+dynamic = ["version"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
 requires-python = ">=3.7"
 dependencies = [
     "plexapi",
     "json5",
     "redis"
 ]
+
+[project.readme]
+file = "README.md"
+content-type = "text/markdown"
 
 [project.scripts]
 db = "media_conveyor.main:main"
@@ -27,7 +38,20 @@ plex = "media_conveyor.plex_test:main"
 [project.optional-dependencies]
 dev = [
     "ruff",
+    "tox",
+    "build",
+    "pytest",
+    "coverage"
 ]
+
+[tool.setuptools]
+include-package-data = true
+platforms = ["any"]
+license-files = ["LICENSE"]
+
+[tool.setuptools.packages.find]
+exclude = ["tests"]
+namespaces = false
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
