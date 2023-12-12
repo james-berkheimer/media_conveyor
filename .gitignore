@@ -162,3 +162,5 @@ cython_debug/
 
 # Custom
 media_conveyor/version.py
+*.code-workspace
+.notes.py

@@ -9,8 +9,8 @@ from pprint import pprint
 import json5 as json
 from plexapi.server import PlexServer
 
-from .authentication import PlexAuthentication
-from .plex_data import PlexData
+from ..authentication import PlexAuthentication
+from ..plex_data import PlexData
 
 # from .plex_data import PlexMovies
 

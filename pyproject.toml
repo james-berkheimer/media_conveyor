@@ -23,7 +23,8 @@ requires-python = ">=3.7"
 dependencies = [
     "plexapi",
     "json5",
-    "redis"
+    "redis",
+    "boto3"
 ]
 
 [project.readme]
@@ -34,6 +35,9 @@ content-type = "text/markdown"
 db = "media_conveyor.main:main"
 testing = "media_conveyor.main:test_db"
 plex = "media_conveyor.plex_test:main"
+awsr = "media_conveyor.testers.aws_tester:aws_run"
+awst = "media_conveyor.testers.aws_tester:aws_test"
+awss = "media_conveyor.testers.aws_tester:aws_stop"
 
 [project.optional-dependencies]
 dev = [
@@ -51,7 +55,9 @@ license-files = ["LICENSE"]
 
 [tool.setuptools.packages.find]
 exclude = ["tests"]
-namespaces = false
+namespaces = true
+where = ["src"]
+
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
