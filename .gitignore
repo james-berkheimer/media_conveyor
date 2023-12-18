@@ -164,3 +164,8 @@ cython_debug/
 media_conveyor/version.py
 *.code-workspace
 .notes.py
+tests/aws_state.json
+tmp*.py
+
+# Ruff
+.ruff_cache/

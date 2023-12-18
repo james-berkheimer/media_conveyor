@@ -12,7 +12,7 @@ from .plex_data import PlexData
 from .redis_db import RedisPlexDB
 
 # TODO Temporarily setting the environment variable here for dev purposes
-os.environ["MEDIA_CONVEYOR"] = f"{Path.home()}/.media_conveyor"
+# os.environ["MEDIA_CONVEYOR"] = f"{Path.home()}/.media_conveyor"
 
 r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
 
