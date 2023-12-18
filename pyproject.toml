@@ -24,7 +24,8 @@ dependencies = [
     "plexapi",
     "json5",
     "redis",
-    "boto3"
+    "boto3",
+    "tqdm"
 ]
 
 [project.readme]
@@ -34,7 +35,7 @@ content-type = "text/markdown"
 [project.scripts]
 db = "media_conveyor.main:main"
 testing = "media_conveyor.main:test_db"
-plex = "media_conveyor.plex_test:main"
+plex = "media_conveyor.testers.plex_tester:main"
 awsr = "media_conveyor.testers.aws_tester:aws_run"
 awst = "media_conveyor.testers.aws_tester:aws_test"
 awss = "media_conveyor.testers.aws_tester:aws_stop"

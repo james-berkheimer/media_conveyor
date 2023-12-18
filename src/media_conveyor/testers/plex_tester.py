@@ -15,7 +15,7 @@ from ..plex_data import PlexData
 # from .plex_data import PlexMovies
 
 # TODO Temporarily setting the environment variable here for dev purposes
-os.environ["MEDIA_CONVEYOR"] = f"{Path.home()}/.media_conveyor"
+# os.environ["MEDIA_CONVEYOR"] = f"{Path.home()}/.media_conveyor"
 
 cwd = os.getcwd()
 
@@ -63,11 +63,10 @@ def get_db():
 
 def main():
     plex_auth = PlexAuthentication()
-    plex_data = PlexData(plex_auth.baseurl, plex_auth.token)
+    PlexData(plex_auth.baseurl, plex_auth.token)
 
     # db = plex_data.package_libraries(shows=False, music=False)
     # db = plex_data.package_libraries(movies=True)
-    movies = plex_data.movies_db
     # for key, movie_dict in movies.items():
     for key, movie_dict in list(hats.items())[:5]:
         print(type(key), type(movie_dict))
