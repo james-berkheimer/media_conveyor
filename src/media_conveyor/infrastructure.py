@@ -3,8 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-import time
-from pprint import pprint
+from typing import Tuple
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
@@ -14,155 +13,183 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class AWSState:
-    EC2_SERVICE_NAME = "ec2"
-    ELASTICACHE_SERVICE_NAME = "elasticache"
-    MAX_ATTEMPTS = 30
-    DELAY_SECONDS = 10
-
-    def __init__(self, resource_configs: dict):
+class AWSResourceCreator:
+    def __init__(self, resource_configs: dict = None):
+        if resource_configs is None:
+            resource_configs = {}
         self.resource_configs = resource_configs
         self.aws_state_path = os.path.join(
             os.getenv("MEDIA_CONVEYOR"), "aws_state.json"
         )
-        self.ec2_client = boto3.client(self.EC2_SERVICE_NAME)
-        self.elasticache_client = boto3.client(self.ELASTICACHE_SERVICE_NAME)
-        self.ec2_instance = None
-        self.elasticache_cluster = None
-        self.subnet_id = None
-        self.vpc_id = None
+        self.ec2_client = boto3.client("ec2")
+        self.elasticache_client = boto3.client("elasticache")
+
+    def _create_resource(self, client, method, params, resource_type):
+        try:
+            response = getattr(client, method)(**params)
+            # logger.info(f"Response: {response}")  # Log the response
+            logger.info(f"Resource Type: {resource_type}")  # Log the response
+            if resource_type == "GroupId":
+                resource_id = response[resource_type]
+            elif resource_type == "Instances":
+                resource_id = response[resource_type][0]["InstanceId"]
+            elif resource_type == "CacheSubnetGroup":
+                resource_id = response[resource_type]["CacheSubnetGroupName"]
+            else:
+                resource_id = response[resource_type][resource_type + "Id"]
+            logger.info(
+                f"{resource_type.capitalize()} created successfully. Id: {resource_id}"
+            )
+            return resource_id
+        except (BotoCoreError, ClientError) as e:
+            logger.error(f"Failed to create {resource_type}. Error: {str(e)}")
+            return None
+
+    def _create_vpc(self) -> str:
+        return self._create_resource(
+            self.ec2_client, "create_vpc", self.resource_configs.get("vpc", {}), "Vpc"
+        )
+
+    def _create_subnet(self, vpc_id) -> str:
+        params = self.resource_configs.get("subnet", {})
+        params["VpcId"] = vpc_id
+        return self._create_resource(self.ec2_client, "create_subnet", params, "Subnet")
+
+    def _create_ec2_security_group(self, vpc_id: str) -> str:
+        params = self.resource_configs.get("security_group", {}).get("ec2", {})
+        if not params:
+            logger.error("Resource_type 'ec2' not found in security_group configs")
+            return None
+        params["VpcId"] = vpc_id
+        ec2_security_group_id = self._create_resource(
+            self.ec2_client, "create_security_group", params, "GroupId"
+        )
+
+        if ec2_security_group_id:
+            # Authorize inbound traffic to the EC2 security group (example: allow SSH)
+            ip_permissions = self.resource_configs.get("security_group", {}).get(
+                "ec2_ip_permissions", []
+            )
+            self.ec2_client.authorize_security_group_ingress(
+                GroupId=ec2_security_group_id, IpPermissions=ip_permissions
+            )
+            logger.info("Authorized inbound traffic to the EC2 security group")
+        return ec2_security_group_id
+
+    def _create_elasticache_security_group(
+        self, ec2_security_group_id: str, vpc_id: str
+    ) -> str:
+        params = self.resource_configs.get("security_group", {}).get("elasticache", {})
+        if not params:
+            logger.error(
+                "Resource_type 'elasticache' not found in security_group configs"
+            )
+            return None
+        params["VpcId"] = vpc_id
+        elasticache_security_group_id = self._create_resource(
+            self.ec2_client, "create_security_group", params, "GroupId"
+        )
+
+        if elasticache_security_group_id:
+            # Authorize ingress for Redis (example: allow access from your EC2 security group)
+            ip_permissions = self.resource_configs.get("security_group", {}).get(
+                "cache_ip_permissions", []
+            )
+            for permission in ip_permissions:
+                permission["UserIdGroupPairs"] = [{"GroupId": ec2_security_group_id}]
+            self.ec2_client.authorize_security_group_ingress(
+                GroupId=elasticache_security_group_id,
+                IpPermissions=ip_permissions,
+            )
+            logger.info("Authorized ingress for Redis")
+        return elasticache_security_group_id
+
+    def _create_ec2_instance(self, subnet_id, ec2_security_group_id) -> str:
+        params = self.resource_configs.get("ec2", {})
+        params["NetworkInterfaces"] = [
+            {
+                "DeviceIndex": 0,
+                "SubnetId": subnet_id,
+                "Groups": [ec2_security_group_id],
+                "AssociatePublicIpAddress": True,
+            }
+        ]
+        return self._create_resource(
+            self.ec2_client, "run_instances", params, "Instances"
+        )
+
+    def _create_cache_subnet_group(self, subnet_id: str, vpc_id: str) -> str:
+        cache_subnet_group_name = "mccachesubnetgroup"
+        try:
+            response = self.elasticache_client.describe_cache_subnet_groups(
+                CacheSubnetGroupName=cache_subnet_group_name
+            )
+            if response["CacheSubnetGroups"]:
+                existing_vpc_id = response["CacheSubnetGroups"][0]["VpcId"]
+                if existing_vpc_id == vpc_id:
+                    logger.info(
+                        f"Cache subnet group {cache_subnet_group_name} already exists and is associated with the correct VPC."
+                    )
+                    return cache_subnet_group_name
+                else:
+                    logger.info(
+                        f"Cache subnet group {cache_subnet_group_name} exists but is associated with a different VPC. Creating a new cache subnet group."
+                    )
+                    cache_subnet_group_name += "_new"
+        except self.elasticache_client.exceptions.CacheSubnetGroupNotFoundFault:
+            pass
+
+        params = {
+            "CacheSubnetGroupName": cache_subnet_group_name,
+            "SubnetIds": [subnet_id],
+            "CacheSubnetGroupDescription": "My cache subnet group",
+        }
+        resource_id = self._create_resource(
+            self.elasticache_client,
+            "create_cache_subnet_group",
+            params,
+            "CacheSubnetGroup",
+        )
+        return resource_id
+
+    def _create_elasticache_cluster(
+        self, subnet_id, vpc_id, cache_security_group_id
+    ) -> Tuple[str, str]:
+        params = self.resource_configs.get("elasticache", {})
+        cache_subnet_group_name = self._create_cache_subnet_group(subnet_id, vpc_id)
+        params["CacheSubnetGroupName"] = cache_subnet_group_name
+        if params["CacheSubnetGroupName"] is None:
+            return None
+        params["SecurityGroupIds"] = [cache_security_group_id]
+        cluster_id = self._create_resource(
+            self.elasticache_client,
+            "create_cache_cluster",
+            params,
+            "CacheCluster",
+        )
+        return cache_subnet_group_name, cluster_id
 
     def create_state(self):
-        if os.path.exists(self.aws_state_path):
-            self.terminate_state()
-
-        def create_resource(client, params: dict, key: str, id_key: str):
-            logger.info(f"Creating {key}...")
-
-            # Use the appropriate create method based on the resource type
-            if key == "Vpc":
-                create_method = client.create_vpc
-            elif key == "Subnet":
-                create_method = client.create_subnet
-            elif key == "Instances":
-                create_method = client.run_instances
-            elif key == "CacheCluster":
-                create_method = client.create_cache_cluster
-            else:
-                raise ValueError(f"Unsupported resource type: {key}")
-
-            try:
-                response = create_method(**params)
-                if key == "Instances":
-                    resource_id = response[key][0][id_key]
-                else:
-                    resource_id = response[key][id_key]
-                logger.info(
-                    f"{key.capitalize()} created successfully. {id_key.capitalize()}: {resource_id}"
-                )
-                return resource_id
-            except (BotoCoreError, ClientError) as e:
-                logger.error(f"Error creating {key}: {e}")
-                return None
-
-        # Create VPC and Subnet
-        vpc_id = create_resource(
-            self.ec2_client, self.resource_configs["vpc"], "Vpc", "VpcId"
+        vpc_id = self._create_vpc()
+        subnet_id = self._create_subnet(vpc_id)
+        ec2_security_group_id = self._create_ec2_security_group(vpc_id)
+        cache_security_group_id = self._create_elasticache_security_group(
+            ec2_security_group_id, vpc_id
         )
-        self.resource_configs["subnet"]["VpcId"] = vpc_id
-        subnet_id = create_resource(
-            self.ec2_client, self.resource_configs["subnet"], "Subnet", "SubnetId"
-        )
-
-        # Create EC2 Instance using the subnet_id
-        ec2_params = self.resource_configs["ec2"]
-        ec2_params["SubnetId"] = subnet_id
-        ec2_instance_id = create_resource(
-            self.ec2_client, ec2_params, "Instances", "InstanceId"
-        )
-
-        # Create ElastiCache Cluster using the vpc_id
-        elasticache_params = self.resource_configs["elasticache"]
-        elasticache_params["SecurityGroupIds"] = list(vpc_id)
-        elasticache_cluster_id = create_resource(
-            self.elasticache_client,
-            elasticache_params,
-            "CacheCluster",
-            "CacheClusterId",
+        instance_id = self._create_ec2_instance(subnet_id, ec2_security_group_id)
+        cache_subnet_group_name, cluster_id = self._create_elasticache_cluster(
+            subnet_id, vpc_id, cache_security_group_id
         )
 
         # Write data to a file
         state_data = {
-            "vpc_id": vpc_id,
-            "subnet_id": subnet_id,
-            "ec2_instance_id": ec2_instance_id,
-            "elasticache_cluster_id": elasticache_cluster_id,
+            "VpcId": vpc_id,
+            "SubnetId": subnet_id,
+            "GroupIds": [ec2_security_group_id, cache_security_group_id],
+            "CacheSubnetGroupName": cache_subnet_group_name,
+            "InstanceIds": [instance_id],
+            "CacheCluster": cluster_id,
         }
 
         with open(self.aws_state_path, "w") as file:
             json.dump(state_data, file)
-
-    def terminate_state(self):
-        if os.path.exists(self.aws_state_path):
-            with open(self.aws_state_path, "r") as file:
-                state_data = json.load(file)
-
-            resources_to_terminate = [
-                (
-                    "elasticache_cluster_id",
-                    self.elasticache_client.delete_cache_cluster,
-                ),
-                ("ec2_instance_id", self.ec2_client.terminate_instances),
-                ("subnet_id", self.ec2_client.delete_subnet),
-                ("vpc_id", self.ec2_client.delete_vpc),
-            ]
-
-            for resource_key, terminate_function in resources_to_terminate:
-                resource_id = state_data.get(resource_key)
-                if resource_id:
-                    try:
-                        terminate_function(ResourceIds=[resource_id])
-                        self.wait_for_termination(
-                            describe_function=getattr(
-                                self.ec2_client, f"describe_{resource_key}s"
-                            ),
-                            resource_id=resource_id,
-                        )
-                    except (BotoCoreError, ClientError) as e:
-                        logger.error(f"Error terminating resource {resource_key}: {e}")
-
-            # Remove the aws_state.json file after termination
-            os.remove(self.aws_state_path)
-
-    def wait_for_termination(
-        self,
-        describe_function,
-        resource_id,
-        max_attempts=MAX_ATTEMPTS,
-        delay_seconds=DELAY_SECONDS,
-    ):
-        """
-        Wait for the termination of a resource by polling its status.
-        """
-        for _ in range(max_attempts):
-            try:
-                resource_info = describe_function(ResourceIds=[resource_id])
-                if not resource_info["ResponseMetadata"]["HTTPStatusCode"] == 200:
-                    logger.warning(
-                        f"Failed to get status for resource {resource_id}. Retrying..."
-                    )
-                    time.sleep(delay_seconds)
-                    continue
-
-                resource_status = resource_info["Status"]
-                if resource_status.lower() == "terminated":
-                    logger.info(f"Resource {resource_id} terminated successfully.")
-                    return True
-            except (BotoCoreError, ClientError) as e:
-                logger.warning(
-                    f"Error checking status for resource {resource_id}: {e}. Retrying..."
-                )
-            time.sleep(delay_seconds)
-
-        logger.warning(f"Timeout waiting for resource {resource_id} to terminate.")
-        return False
