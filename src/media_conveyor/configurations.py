@@ -8,17 +8,19 @@ class Configuration:
     def __init__(self) -> None:
         self.configs_path = Path(os.getenv("MEDIA_CONVEYOR"))
 
+    def get_config_path(self, config_type: str):
+        config_path = self.configs_path / f"configs/{config_type}"
+        if not config_path.exists():
+            raise FileNotFoundError(f"Config directory not found: {config_path}")
+        return config_path
+
 
 class AWSConfigs(Configuration):
     def __init__(self) -> None:
         super().__init__()
 
     def resolve_state(self):
-        aws_configs_path = self.configs_path / "configs/aws"
-
-        if not aws_configs_path.exists():
-            raise FileNotFoundError(f"Config directory not found: {aws_configs_path}")
-
+        aws_configs_path = self.get_config_path("aws")
         aws_state_data = {}
         config_files = [
             entry
@@ -35,6 +37,6 @@ class AWSConfigs(Configuration):
                     aws_state_data[key] = config_data
             except (json.JSONDecodeError, FileNotFoundError) as e:
                 # Handle JSON decoding errors or missing files
-                raise ValueError(f"Error processing {config_file}: {e}")
+                raise ValueError(f"Error processing {config_file}: {e}") from e
 
         return aws_state_data
