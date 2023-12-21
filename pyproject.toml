@@ -1,11 +1,9 @@
 [build-system]
-requires = [
-    "setuptools",
-]
+requires = ["setuptools>=42", "wheel", "setuptools_scm"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
-write_to = "media_conveyor/version.py"
+write_to = "src/media_conveyor/version.py"
 version_scheme = "release-branch-semver"
 
 [project]
@@ -98,4 +96,4 @@ ignore = [
     "N802",
     "F401"
 ]
-line-length = 88
+line-length = 120

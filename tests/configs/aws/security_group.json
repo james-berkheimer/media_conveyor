@@ -23,14 +23,6 @@
             }
         ]
     },
-    // "elasticache_sg": {
-    //     "IpProtocol": "tcp",
-    //     "FromPort": "6379",
-    //     "ToPort": "6379",
-    //     "Tags": [
-    //         {"Key": "Name", "Value": "MC_SecurityGroup"}
-    //     ]
-    // },
     "ec2_ip_permissions": [
         {
             "IpProtocol": "tcp",

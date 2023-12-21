@@ -1,12 +1,17 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import logging
+from typing import TYPE_CHECKING, Dict
 
 from redis import Redis
 
-# Used for type-hinting
 if TYPE_CHECKING:
     from .plex_data import PlexData
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 
 class RedisDB:
@@ -19,24 +24,36 @@ class RedisDB:
         self.redis = Redis(
             host=self.host, port=self.port, db=self.db, decode_responses=True
         )
+        logging.info(
+            "RedisDB instance created with host=%s, port=%d, db=%d", host, port, db
+        )
 
 
 class RedisPlexDB(RedisDB):
-    # TODO Is there a need to refresh the database?  If so then I need to develop a
-    # method for removing Plex entries that don't exist any longer
     def __init__(
-        self: RedisDB,
-        plex_db: dict,
+        self: "RedisDB",
+        plex_db: Dict[str, str],
         host: str = "localhost",
         port: int = 6379,
         db: int = 0,
     ) -> None:
         super().__init__(host, port, db)
         self.plex_db = plex_db
+        logging.info(
+            "RedisPlexDB instance created with plex_db=%s, host=%s, port=%d, db=%d",
+            plex_db,
+            host,
+            port,
+            db,
+        )
 
-    def make_db(self):
-        with self.redis.pipeline() as pipe:
-            for key_id, value_data in self.plex_db.items():
-                pipe.hmset(key_id, value_data)
-            pipe.execute()
-        self.redis.bgsave()
+    def make_db(self) -> None:
+        try:
+            with self.redis.pipeline() as pipe:
+                for key_id, value_data in self.plex_db.items():
+                    pipe.hset(key_id, value_data)
+                pipe.execute()
+            self.redis.bgsave()
+            logging.info("Database created successfully")
+        except Exception as e:
+            logging.error("An error occurred: %s", e)

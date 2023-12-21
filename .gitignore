@@ -166,6 +166,7 @@ media_conveyor/version.py
 .notes.py
 tests/aws_state.json
 tmp*.py
+version.py
 
 # Ruff
 .ruff_cache/
