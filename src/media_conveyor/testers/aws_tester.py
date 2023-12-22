@@ -47,12 +47,6 @@ def aws_stop():
 def aws_test():
     logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler()])
 
-    verify_credentials(
-        aws_access_key_id="AKIASD2LQCWVVVAUJ74A",
-        aws_secret_access_key="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",
-        region_name="us-east-1",
-    )
-
 
 def verify_credentials(aws_access_key_id, aws_secret_access_key, region_name):
     try:
