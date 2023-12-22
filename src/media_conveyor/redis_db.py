@@ -9,24 +9,16 @@ if TYPE_CHECKING:
     from .plex_data import PlexData
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
 class RedisDB:
-    def __init__(
-        self: "RedisDB", host: str = "localhost", port: int = 6379, db: int = 0
-    ) -> None:
+    def __init__(self: "RedisDB", host: str = "localhost", port: int = 6379, db: int = 0) -> None:
         self.host = host
         self.port = port
         self.db = db
-        self.redis = Redis(
-            host=self.host, port=self.port, db=self.db, decode_responses=True
-        )
-        logging.info(
-            "RedisDB instance created with host=%s, port=%d, db=%d", host, port, db
-        )
+        self.redis = Redis(host=self.host, port=self.port, db=self.db, decode_responses=True)
+        logging.info("RedisDB instance created with host=%s, port=%d, db=%d", host, port, db)
 
 
 class RedisPlexDB(RedisDB):
