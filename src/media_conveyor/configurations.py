@@ -16,15 +16,11 @@ class Configuration:
             self.configs_path = Path(config_path)
             logger.info(f"Configuration path set to {config_path}")
         else:
-            env_path = os.getenv("MEDIA_CONVEYOR")
-            if env_path is None:
-                logger.error(
-                    "No configuration path provided and MEDIA_CONVEYOR environment variable is not set."
-                )
-                raise ValueError(
-                    "No configuration path provided and MEDIA_CONVEYOR environment variable is not set."
-                )
-            self.configs_path = Path(env_path) / "configs"
+            media_conveyor = os.getenv("MEDIA_CONVEYOR")
+            if media_conveyor is None:
+                logger.error("No configuration path provided and MEDIA_CONVEYOR environment variable is not set.")
+                raise ValueError("No configuration path provided and MEDIA_CONVEYOR environment variable is not set.")
+            self.configs_path = Path(media_conveyor) / "configs"
             logger.info(f"Configuration path set to {self.configs_path}")
 
     def get_config_path(self, config_type: str) -> Path:
@@ -42,11 +38,7 @@ class AWSConfigs(Configuration):
     def resolve_state(self) -> Dict[str, Any]:
         aws_configs_path = self.get_config_path("aws")
         aws_state_data = {}
-        config_files = [
-            entry
-            for entry in aws_configs_path.iterdir()
-            if entry.is_file() and entry.suffix == ".json"
-        ]
+        config_files = [entry for entry in aws_configs_path.iterdir() if entry.is_file() and entry.suffix == ".json"]
 
         for config_file in config_files:
             try:

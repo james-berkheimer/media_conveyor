@@ -23,13 +23,11 @@ class AWSResourceCreator:
         self.resource_configs = resource_configs
         media_conveyor_path = os.getenv("MEDIA_CONVEYOR")
         if media_conveyor_path is None:
-            raise EnvironmentError(
-                "The MEDIA_CONVEYOR environment variable is not set."
-            )
+            raise EnvironmentError("The MC_AWS_STATE environment variable is not set.")
         self.aws_state_path = os.path.join(media_conveyor_path, "aws_state.json")
         self.ec2_client = boto3.client("ec2")
         self.elasticache_client = boto3.client("elasticache")
-        self._check_aws_credentials()
+        # self._check_aws_credentials()
 
     @property
     def current_state(self):
@@ -42,9 +40,7 @@ class AWSResourceCreator:
             logger.error("AWS state file not found. Please create a new state.")
             return None
         except IOError:
-            logger.error(
-                "Failed to open the AWS state file. Check your file permissions."
-            )
+            logger.error("Failed to open the AWS state file. Check your file permissions.")
             return None
 
     @current_state.setter
@@ -54,18 +50,14 @@ class AWSResourceCreator:
             with open(self.aws_state_path, "w") as file:
                 json.dump(state_data, file, indent=4)
         except IOError:
-            logger.error(
-                "Failed to write to the AWS state file. Check your file permissions."
-            )
+            logger.error("Failed to write to the AWS state file. Check your file permissions.")
 
     def create_state(self):
         logger.info("Creating new AWS state")
         vpc_id = self._create_vpc()
         subnet_id = self._create_subnet(vpc_id)
         ec2_security_group_id = self._create_ec2_security_group(vpc_id)
-        cache_security_group_id = self._create_elasticache_security_group(
-            ec2_security_group_id, vpc_id
-        )
+        cache_security_group_id = self._create_elasticache_security_group(ec2_security_group_id, vpc_id)
         instance_id = self._create_ec2_instance(subnet_id, ec2_security_group_id)
         cache_subnet_group_name, cluster_id = self._create_elasticache_cluster(
             subnet_id, vpc_id, cache_security_group_id
@@ -96,15 +88,21 @@ class AWSResourceCreator:
             self._terminate_elasticache_cluster()
             self._delete_cache_subnet_group()
             self._delete_vpc()
+
+            # Delete aws_state.json file after successful termination
+            if os.path.exists("aws_state.json"):
+                os.remove("aws_state.json")
+                logger.info("aws_state.json removed successfully")
+            else:
+                logger.info("aws_state.json does not exist")
+
         except (BotoCoreError, ClientError) as e:
             logger.error(f"Failed to terminate state. Error: {str(e)}")
             raise TerminationError(str(e)) from e
 
     def _create_vpc(self) -> str:
         logger.info("Creating VPC")
-        return self._create_resource(
-            self.ec2_client, "create_vpc", self.resource_configs.get("vpc", {}), "Vpc"
-        )
+        return self._create_resource(self.ec2_client, "create_vpc", self.resource_configs.get("vpc", {}), "Vpc")
 
     def _create_subnet(self, vpc_id) -> str:
         logger.info("Creating subnet for VPC: %s", vpc_id)
@@ -119,30 +117,22 @@ class AWSResourceCreator:
             logger.error("Resource_type 'ec2' not found in security_group configs")
             return None
         params["VpcId"] = vpc_id
-        ec2_security_group_id = self._create_resource(
-            self.ec2_client, "create_security_group", params, "GroupId"
-        )
+        ec2_security_group_id = self._create_resource(self.ec2_client, "create_security_group", params, "GroupId")
 
         if ec2_security_group_id:
             # Authorize inbound traffic to the EC2 security group (example: allow SSH)
-            ip_permissions = self.resource_configs.get("security_group", {}).get(
-                "ec2_ip_permissions", []
-            )
+            ip_permissions = self.resource_configs.get("security_group", {}).get("ec2_ip_permissions", [])
             self.ec2_client.authorize_security_group_ingress(
                 GroupId=ec2_security_group_id, IpPermissions=ip_permissions
             )
             logger.info("Authorized inbound traffic to the EC2 security group")
         return ec2_security_group_id
 
-    def _create_elasticache_security_group(
-        self, ec2_security_group_id: str, vpc_id: str
-    ) -> str:
+    def _create_elasticache_security_group(self, ec2_security_group_id: str, vpc_id: str) -> str:
         logger.info("Creating ElastiCache security group for VPC: %s", vpc_id)
         params = self.resource_configs.get("security_group", {}).get("elasticache", {})
         if not params:
-            logger.error(
-                "Resource_type 'elasticache' not found in security_group configs"
-            )
+            logger.error("Resource_type 'elasticache' not found in security_group configs")
             return None
         params["VpcId"] = vpc_id
         elasticache_security_group_id = self._create_resource(
@@ -151,9 +141,7 @@ class AWSResourceCreator:
 
         if elasticache_security_group_id:
             # Authorize ingress for Redis (example: allow access from your EC2 security group)
-            ip_permissions = self.resource_configs.get("security_group", {}).get(
-                "cache_ip_permissions", []
-            )
+            ip_permissions = self.resource_configs.get("security_group", {}).get("cache_ip_permissions", [])
             for permission in ip_permissions:
                 permission["UserIdGroupPairs"] = [{"GroupId": ec2_security_group_id}]
             self.ec2_client.authorize_security_group_ingress(
@@ -178,14 +166,10 @@ class AWSResourceCreator:
                 "AssociatePublicIpAddress": True,
             }
         ]
-        return self._create_resource(
-            self.ec2_client, "run_instances", params, "Instances"
-        )
+        return self._create_resource(self.ec2_client, "run_instances", params, "Instances")
 
     def _create_cache_subnet_group(self, subnet_id: str, vpc_id: str) -> str:
-        logger.info(
-            "Creating cache subnet group for subnet: %s and VPC: %s", subnet_id, vpc_id
-        )
+        logger.info("Creating cache subnet group for subnet: %s and VPC: %s", subnet_id, vpc_id)
 
         cache_subnet_group_name = "mccachesubnetgroup"
         try:
@@ -220,9 +204,7 @@ class AWSResourceCreator:
         )
         return resource_id
 
-    def _create_elasticache_cluster(
-        self, subnet_id, vpc_id, cache_security_group_id
-    ) -> Tuple[str, str]:
+    def _create_elasticache_cluster(self, subnet_id, vpc_id, cache_security_group_id) -> Tuple[str, str]:
         logger.info(
             "Creating ElastiCache cluster for subnet: %s, VPC: %s and security group: %s",
             subnet_id,
@@ -246,9 +228,7 @@ class AWSResourceCreator:
 
     # self.ec2_client, "create_security_group", params, "GroupId"
     def _create_resource(self, client, method, params, resource_type):
-        logger.info(
-            "Creating resource of type: %s with params: %s", resource_type, params
-        )
+        logger.info("Creating resource of type: %s with params: %s", resource_type, params)
         try:
             response = getattr(client, method)(**params)
             logger.info(f"Resource Type: {resource_type}")  # Log the response
@@ -260,9 +240,7 @@ class AWSResourceCreator:
                 resource_id = response[resource_type]["CacheSubnetGroupName"]
             else:
                 resource_id = response[resource_type][resource_type + "Id"]
-            logger.info(
-                f"{resource_type.capitalize()} created successfully. Id: {resource_id}"
-            )
+            logger.info(f"{resource_type.capitalize()} created successfully. Id: {resource_id}")
             return resource_id
         except (BotoCoreError, ClientError) as e:
             logger.error(f"Failed to create {resource_type}. Error: {str(e)}")
@@ -288,9 +266,7 @@ class AWSResourceCreator:
             current_state = instance["CurrentState"]["Name"]
             previous_state = instance["PreviousState"]["Name"]
 
-            logger.info(
-                f"Instance {instance_id} transitioning from '{previous_state}' to '{current_state}'"
-            )
+            logger.info(f"Instance {instance_id} transitioning from '{previous_state}' to '{current_state}'")
 
             waiter = self.ec2_client.get_waiter("instance_terminated")
             waiter.wait(InstanceIds=[instance_id])
@@ -316,18 +292,12 @@ class AWSResourceCreator:
         logger.info("Deleting cache subnet group")
         cache_subnet_group_name = self.current_state["CacheSubnetGroupName"]
         try:
-            self.elasticache_client.describe_cache_subnet_groups(
-                CacheSubnetGroupName=cache_subnet_group_name
-            )
+            self.elasticache_client.describe_cache_subnet_groups(CacheSubnetGroupName=cache_subnet_group_name)
         except self.elasticache_client.exceptions.CacheSubnetGroupNotFoundFault:
             logger.info(f"Cache subnet group {cache_subnet_group_name} does not exist.")
             return
-        self.elasticache_client.delete_cache_subnet_group(
-            CacheSubnetGroupName=cache_subnet_group_name
-        )
-        logger.info(
-            f"Cache subnet group {cache_subnet_group_name} has been terminated."
-        )
+        self.elasticache_client.delete_cache_subnet_group(CacheSubnetGroupName=cache_subnet_group_name)
+        logger.info(f"Cache subnet group {cache_subnet_group_name} has been terminated.")
 
     def _delete_vpc(self):
         logger.info("Deleting VPC dependencies")
@@ -381,9 +351,7 @@ class AWSResourceCreator:
                     Filters=[{"Name": "instance.group-id", "Values": [sg_id]}]
                 )["Reservations"]
                 for instance in instances:
-                    self.ec2_client.modify_instance_attribute(
-                        InstanceId=instance["InstanceId"], Groups=[]
-                    )
+                    self.ec2_client.modify_instance_attribute(InstanceId=instance["InstanceId"], Groups=[])
 
                 # Delete the security group
                 self.ec2_client.delete_security_group(GroupId=sg_id)
@@ -393,14 +361,12 @@ class AWSResourceCreator:
 
     def _get_vpc_dependencies(self, vpc_id):
         # Get subnets
-        subnets = self.ec2_client.describe_subnets(
-            Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
-        )["Subnets"]
+        subnets = self.ec2_client.describe_subnets(Filters=[{"Name": "vpc-id", "Values": [vpc_id]}])["Subnets"]
 
         # Get security groups
-        security_groups = self.ec2_client.describe_security_groups(
-            Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
-        )["SecurityGroups"]
+        security_groups = self.ec2_client.describe_security_groups(Filters=[{"Name": "vpc-id", "Values": [vpc_id]}])[
+            "SecurityGroups"
+        ]
 
         return {
             "Subnets": subnets,
@@ -413,6 +379,4 @@ class AWSResourceCreator:
         try:
             self.ec2_client.describe_regions()
         except botocore.exceptions.NoCredentialsError as err:
-            raise EnvironmentError(
-                "AWS credentials are not properly configured."
-            ) from err
+            raise EnvironmentError("AWS credentials are not properly configured.") from err

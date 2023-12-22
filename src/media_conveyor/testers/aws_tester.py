@@ -12,33 +12,27 @@ from ..authentication import AWSCredentials
 from ..configurations import AWSConfigs
 from ..infrastructure import AWSResourceCreator
 
+media_conveyor_root = Path.home() / ".media_conveyor"
+project_root = Path(__file__).resolve().parent.parent.parent.parent
+os.environ["MEDIA_CONVEYOR"] = str(project_root / "tests/.media_conveyor")
 credentials = AWSCredentials()
 credentials.load()
-
-project_root = Path(__file__).resolve().parent.parent.parent.parent
-os.environ["MEDIA_CONVEYOR"] = str(project_root / "tests")
 
 
 def aws_run():
     # Step 1: Configure logging to print to the console
     logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler()])
+    # print("Hello, world!")
+    # ec2_client = boto3.client("ec2")
+    # ec2_client.describe_regions()
+    # response = ec2_client.describe_instances()
+    # print(response.get("Reservations", []))
 
     aws_config = AWSConfigs()
     resource_configs = aws_config.resolve_state()
     # pprint(resource_configs)
     state_manager = AWSResourceCreator(resource_configs)
     state_manager.create_state()
-
-
-def aws_test():
-    logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler()])
-
-    # aws_config = AWSConfigs()
-    # resource_configs = aws_config.resolve_state()
-    # pprint(resource_configs)
-    # state_manager = AWSResourceCreator(resource_configs)
-    # print(state_manager.get_current_state())
-    get_default_vpc()
 
 
 def aws_stop():
@@ -50,16 +44,31 @@ def aws_stop():
     state_manager.terminate_state()
 
 
-def get_default_vpc():
-    # Create EC2 client
-    ec2_client = boto3.client("ec2")
+def aws_test():
+    logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler()])
 
-    # Describe the VPCs
-    response = ec2_client.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
+    verify_credentials(
+        aws_access_key_id="AKIASD2LQCWVVVAUJ74A",
+        aws_secret_access_key="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",
+        region_name="us-east-1",
+    )
 
-    # Check if there is a default VPC
-    if "Vpcs" in response and len(response["Vpcs"]) > 0:
-        default_vpc_id = response["Vpcs"][0]["VpcId"]
-        print(f"Default VPC ID: {default_vpc_id}")
-    else:
-        print("No default VPC found.")
+
+def verify_credentials(aws_access_key_id, aws_secret_access_key, region_name):
+    try:
+        # Create a session using your credentials
+        session = boto3.Session(
+            aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key, region_name=region_name
+        )
+
+        # Create an EC2 resource object using the session
+        ec2_resource = session.resource("ec2")
+
+        # Use the EC2 resource object to make a request
+        # This will throw an exception if the credentials are not valid
+        ec2_resource.instances.all().limit(1)
+
+        print("Credentials are valid.")
+    except Exception as e:
+        print("Credentials are not valid.")
+        print("Error:", e)

@@ -15,15 +15,9 @@ class PlexData(PlexServer):
         self._movie_sections = []
         self._shows_sections = []
         self._music_sections = []
-        self._movie_sections.extend(
-            section for section in self.library.sections() if section.type == "movie"
-        )
-        self._shows_sections.extend(
-            section for section in self.library.sections() if section.type == "show"
-        )
-        self._music_sections.extend(
-            section for section in self.library.sections() if section.type == "artist"
-        )
+        self._movie_sections.extend(section for section in self.library.sections() if section.type == "movie")
+        self._shows_sections.extend(section for section in self.library.sections() if section.type == "show")
+        self._music_sections.extend(section for section in self.library.sections() if section.type == "artist")
         logger.info("PlexData initialized successfully")
 
     @property
