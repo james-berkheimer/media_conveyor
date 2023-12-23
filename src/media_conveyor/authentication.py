@@ -1,3 +1,4 @@
+import copy
 import logging
 import os
 from pathlib import Path
@@ -34,7 +35,7 @@ class Authentication:
 
     def _mask_auth_data(self) -> Dict[str, Any]:
         # Mask sensitive data in auth_data for logging
-        masked_auth_data = self.auth_data.copy()
+        masked_auth_data = copy.deepcopy(self.auth_data)
         for service in masked_auth_data:
             for key in masked_auth_data[service]:
                 if "token" in key or "key" in key:
