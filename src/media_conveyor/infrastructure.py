@@ -27,7 +27,6 @@ class AWSResourceCreator:
         self.aws_state_path = os.path.join(media_conveyor_path, "aws_state.json")
         self.ec2_client = boto3.client("ec2")
         self.elasticache_client = boto3.client("elasticache")
-        # self._check_aws_credentials()
 
     @property
     def current_state(self):
@@ -226,7 +225,6 @@ class AWSResourceCreator:
         )
         return cache_subnet_group_name, cluster_id
 
-    # self.ec2_client, "create_security_group", params, "GroupId"
     def _create_resource(self, client, method, params, resource_type):
         logger.info("Creating resource of type: %s with params: %s", resource_type, params)
         try:
@@ -273,15 +271,19 @@ class AWSResourceCreator:
             logger.info(f"Instance {instance_id} has been terminated.")
 
     def _terminate_elasticache_cluster(self):
-        # TODO: Let's remove the cluster from the VPC first.
-        # That way we can delete the VPC without having to wait for the cluster to delete.
         logger.info("Terminating ElastiCache cluster")
         cluster_id = self.current_state["CacheClusterId"]
         try:
-            self.elasticache_client.describe_cache_clusters(CacheClusterId=cluster_id)
+            response = self.elasticache_client.describe_cache_clusters(CacheClusterId=cluster_id)
         except self.elasticache_client.exceptions.CacheClusterNotFoundFault:
             logger.info(f"ElastiCache cluster {cluster_id} does not exist.")
             return
+
+        cluster_status = response["CacheClusters"][0]["CacheClusterStatus"]
+        if cluster_status != "available":
+            logger.info(f"ElastiCache cluster {cluster_id} is not in 'available' state.")
+            return
+
         self.elasticache_client.delete_cache_cluster(CacheClusterId=cluster_id)
 
         waiter = self.elasticache_client.get_waiter("cache_cluster_deleted")
@@ -315,8 +317,11 @@ class AWSResourceCreator:
         # Check if there are no dependencies
         if not any(dependencies.values()):
             logger.info(f"VPC {vpc_id} has no dependencies.")
-            self.ec2_client.delete_vpc(VpcId=vpc_id)
-            logger.info(f"VPC {vpc_id} has been deleted.")
+            try:
+                self.ec2_client.delete_vpc(VpcId=vpc_id)
+                logger.info(f"VPC {vpc_id} has been deleted.")
+            except self.ec2_client.exceptions.ClientError as e:
+                logger.error(f"Failed to delete VPC {vpc_id} due to: {e}")
             return
 
         # Delete dependencies in the correct order
@@ -324,8 +329,12 @@ class AWSResourceCreator:
         self._delete_security_groups(dependencies["SecurityGroups"])
         # Add other delete methods as needed
 
-        self.ec2_client.delete_vpc(VpcId=vpc_id)
-        logger.info(f"VPC {vpc_id} has been deleted.")
+        try:
+            self.ec2_client.delete_vpc(VpcId=vpc_id)
+            logger.info(f"VPC {vpc_id} has been deleted.")
+        except self.ec2_client.exceptions.ClientError as e:
+            logger.error(f"Failed to delete VPC {vpc_id} due to: {e}")
+            # logger.error(f"VPC {vpc_id} dependencies: {dependencies}")
 
     def _delete_subnets(self, subnets):
         for subnet in subnets:
@@ -340,24 +349,59 @@ class AWSResourceCreator:
                 logger.error(f"Failed to delete subnet {subnet_id}: {e}")
 
     def _delete_security_groups(self, security_groups):
-        for sg in security_groups:
-            sg_id = sg["GroupId"]
-            if sg.get("GroupName") == "default":
-                logger.info(f"Skipping default Security Group {sg_id}.")
-                continue
-            try:
-                # Disassociate the security group from all instances
-                instances = self.ec2_client.describe_instances(
-                    Filters=[{"Name": "instance.group-id", "Values": [sg_id]}]
-                )["Reservations"]
-                for instance in instances:
-                    self.ec2_client.modify_instance_attribute(InstanceId=instance["InstanceId"], Groups=[])
+        # Separate the security groups based on their dependencies
+        sg_dependent = [sg for sg in security_groups if self._is_dependent(sg)]
+        sg_independent = [sg for sg in security_groups if not self._is_dependent(sg)]
 
-                # Delete the security group
-                self.ec2_client.delete_security_group(GroupId=sg_id)
-                logger.info(f"Security Group {sg_id} has been deleted.")
-            except self.ec2_client.exceptions.ClientError as e:
-                logger.error(f"Failed to delete Security Group {sg_id}: {e}")
+        # Delete the dependent security groups first
+        for sg_list in [sg_dependent, sg_independent]:
+            for sg in sg_list:
+                sg_id = sg["GroupId"]
+                if sg.get("GroupName") == "default":
+                    logger.info(f"Skipping default Security Group {sg_id}.")
+                    continue
+                try:
+                    # Disassociate the security group from all instances
+                    instances = self.ec2_client.describe_instances(
+                        Filters=[{"Name": "instance.group-id", "Values": [sg_id]}]
+                    )["Reservations"]
+                    for instance in instances:
+                        self.ec2_client.modify_instance_attribute(InstanceId=instance["InstanceId"], Groups=[])
+
+                    # Delete the security group
+                    self.ec2_client.delete_security_group(GroupId=sg_id)
+                    logger.info(f"Security Group {sg_id} has been deleted.")
+                except self.ec2_client.exceptions.ClientError as e:
+                    logger.error(f"Failed to delete Security Group {sg_id}: {e}")
+
+    def _is_dependent(self, sg):
+        sg_id = sg["GroupId"]
+
+        # Get the inbound rules
+        inbound_rules = self.ec2_client.describe_security_group_rules(
+            Filters=[{"Name": "group-id", "Values": [sg_id]}]
+        )["SecurityGroupRules"]
+
+        # Check if any inbound rule references another security group
+        for rule in inbound_rules:
+            if "ReferencedGroupId" in rule:
+                return True
+
+        # Get the security group details
+        sg_details = self.ec2_client.describe_security_groups(GroupIds=[sg_id])["SecurityGroups"][0]
+
+        # Get the outbound rules
+        outbound_rules = sg_details["IpPermissionsEgress"]
+
+        # Check if any outbound rule references another security group
+        for rule in outbound_rules:
+            if "UserIdGroupPairs" in rule:
+                for pair in rule["UserIdGroupPairs"]:
+                    if "GroupId" in pair:
+                        return True
+
+        # If no inbound or outbound rule references another security group, then the security group is not dependent
+        return False
 
     def _get_vpc_dependencies(self, vpc_id):
         # Get subnets

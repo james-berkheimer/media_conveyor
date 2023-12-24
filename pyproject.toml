@@ -22,8 +22,7 @@ dependencies = [
     "plexapi",
     "json5",
     "redis",
-    "boto3",
-    "tqdm"
+    "boto3"
 ]
 
 [project.readme]
