@@ -22,7 +22,8 @@ dependencies = [
     "plexapi",
     "json5",
     "redis",
-    "boto3"
+    "boto3",
+    "colorlog"
 ]
 
 [project.readme]
@@ -30,12 +31,15 @@ file = "README.md"
 content-type = "text/markdown"
 
 [project.scripts]
-db = "media_conveyor.main:main"
-testing = "media_conveyor.main:test_db"
+main = "media_conveyor.main:main"
+db = "media_conveyor.main:test_db"
+check = "media_conveyor.main:check_db"
 plex = "media_conveyor.testers.plex_tester:main"
 awsr = "media_conveyor.testers.aws_tester:aws_run"
 awst = "media_conveyor.testers.aws_tester:aws_test"
 awss = "media_conveyor.testers.aws_tester:aws_stop"
+rup = "media_conveyor.testers.redis_upload_tester:upload"
+rping = "media_conveyor.testers.redis_upload_tester:ping"
 
 [project.optional-dependencies]
 dev = [

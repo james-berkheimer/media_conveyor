@@ -168,6 +168,8 @@ aws_state.json
 tmp*.py
 version.py
 credentials.json
+.copilot
+*.pem
 
 # Ruff
 .ruff_cache/

@@ -1,144 +1,188 @@
 from __future__ import annotations
 
+# import json5 as json
+import json
 import logging
 import re
+from pathlib import Path
 
-import json5 as json
+from plexapi.exceptions import BadRequest, NotFound
 from plexapi.server import PlexServer
 
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__)
+from .utils import setup_logger
+
+logger = setup_logger()
 
 
 class PlexData(PlexServer):
-    def __init__(self, baseurl=None, token=None, session=None, timeout=None):
-        super().__init__(baseurl, token, session, timeout)
-        self._movie_sections = []
-        self._shows_sections = []
-        self._music_sections = []
-        self._movie_sections.extend(section for section in self.library.sections() if section.type == "movie")
-        self._shows_sections.extend(section for section in self.library.sections() if section.type == "show")
-        self._music_sections.extend(section for section in self.library.sections() if section.type == "artist")
-        logger.info("PlexData initialized successfully")
+    NON_ALPHANUMERIC = re.compile(r"[^a-zA-Z0-9]")
 
-    @property
-    def movies(self) -> list:
+    def __init__(self, baseurl=None, token=None, session=None, timeout=None):
+        try:
+            super().__init__(baseurl, token, session, timeout)
+            self._movie_sections = self._get_sections("movie")
+            self._shows_sections = self._get_sections("show")
+            self._music_sections = self._get_sections("artist")
+            logger.info("PlexData initialized successfully")
+        except BadRequest as e:
+            logger.error(f"Failed to initialize PlexData due to bad request: {e}")
+            raise
+        except NotFound as e:
+            logger.error(f"Failed to initialize PlexData due to resource not found: {e}")
+            raise
+        except Exception as e:
+            logger.critical(f"Failed to initialize PlexData due to unexpected error: {e}")
+            raise
+
+    def _get_sections(self, section_type):
+        try:
+            sections = [section for section in self.library.sections() if section.type == section_type]
+            logger.debug(f"Retrieved {len(sections)} {section_type} sections")
+            return sections
+        except BadRequest as e:
+            logger.error(f"Failed to get sections of type {section_type} due to bad request: {e}")
+            raise
+        except NotFound as e:
+            logger.error(f"Failed to get sections of type {section_type} due to resource not found: {e}")
+            raise
+        except Exception as e:
+            logger.critical(f"Failed to get sections of type {section_type} due to unexpected error: {e}")
+            raise
+
+    def _movies(self) -> list:
         movies = [movie for section in self._movie_sections for movie in section.all()]
         logger.info(f"Retrieved {len(movies)} movies")
         return movies
 
-    @property
-    def shows(self) -> list:
+    def _shows(self) -> list:
         shows = [show for section in self._shows_sections for show in section.all()]
         logger.info(f"Retrieved {len(shows)} shows")
         return shows
 
-    @property
-    def music(self) -> list:
+    def _music(self) -> list:
         music = [music for section in self._music_sections for music in section.all()]
         logger.info(f"Retrieved {len(music)} music")
         return music
 
     @property
-    def movies_db(self) -> dict:
-        db = {}
-        pattern = re.compile(r"[^a-zA-Z0-9]")
-        for movie in self.movies:
-            # Verify data exists.
-            movie_title = movie.title or "NONE"
-            movie_year = movie.year or "NONE"
-            movie_thumb = movie.thumb or "NONE"
-            movie_paths = movie.locations or "NONE"
-            if movie_paths != "NONE":
+    def get_movies_db(self) -> dict:
+        get_movies_db = {}
+        for movie in self._movies():
+            movie_title = movie.title or "empty"
+            movie_year = movie.year or "empty"
+            movie_thumb = movie.thumb or "empty"
+            movie_paths = movie.locations or "empty"
+            if movie_paths:
                 movie_paths = str(";".join(movie.locations))
 
-            movie_name = pattern.sub("", movie.title).strip()
-            db[f"movie:{movie_name}:{movie.year}"] = {
+            movie_name = self.NON_ALPHANUMERIC.sub("", movie.title).strip()
+            db = {
                 "title": movie_title,
                 "year": movie_year,
                 "file_path": movie_paths,
                 "thumb_path": movie_thumb,
             }
+            get_movies_db[f"movie:{movie_name}:{movie.year}"] = db
+            logger.debug(f"Added movie {movie_title} to the database")
         logger.info("Generated movies database")
-        return db
+        return get_movies_db
 
     @property
-    def shows_db(self) -> dict:
-        shows_db = {}
-        pattern = re.compile(r"[^a-zA-Z0-9]")
-        for show in self.shows:
-            # Verify data exists.
-            show_name = pattern.sub("", show.title).strip()
-            show_title = show.title or "NONE"
-            show_year = show.year or "NONE"
-            show_thumb = show.thumb or "NONE"
+    def get_shows_db(self) -> dict:
+        get_shows_db = {}
+        for show in self._shows():
+            show_name = self.NON_ALPHANUMERIC.sub("", show.title).strip()
+            show_title = show.title or "empty"
+            show_year = show.year or "empty"
+            show_thumb = show.thumb or "empty"
 
-            shows_db[f"show:{show_name}:{show.year}"] = {
+            db = {
                 "title": show_title,
                 "year": show_year,
                 "thumb_path": show_thumb,
-                "episodes": self._get_episodes(show),
+                "show_location": show.locations[0],
+                # _get_episodes returns a dict.  Redis will not take a dict as a
+                # value and so the dict needs to be serialized.
+                "episodes": json.dumps(self._get_episodes(show)),
             }
-        logger.info("Generated TV shows database")
-        return shows_db
 
-    def _get_episodes(self, show) -> str:
-        # Verify data exists.
+            get_shows_db[f"show:{show_name}:{show.year}"] = db
+            logger.debug(f"Added show {show_title} to the database")
+        logger.info("Generated TV shows database")
+        return get_shows_db
+
+    def _get_episodes(self, show) -> dict:
         if show.seasons():
-            episode_db = {}
+            episode_dict = {}
             for season in show.seasons():
+                episode_dict[f"season:{season.seasonNumber}"] = {}
                 for episode in season.episodes():
-                    episode_db[f"season {season.seasonNumber}"] = {
-                        "episode_number": episode.episodeNumber,
+                    episode_dict[f"season:{season.seasonNumber}"][f"episode:{episode.episodeNumber}"] = {
                         "episode_name": episode.title,
-                        "episode_location": episode.locations,
+                        "episode_filename": Path(episode.locations[0]).stem,
                     }
-            return json.dumps(episode_db)
+            return episode_dict
         else:
-            return "NONE"
+            return {}
 
     @property
-    def music_db(self) -> dict:
-        music_db = {}
-        pattern = re.compile(r"[^a-zA-Z0-9]")
-        for artist in self.music:
-            # Verify data exists.
-            artist_title = artist.title or "NONE"
-            artist_thumb = artist.thumb or "NONE"
-            artist_name = pattern.sub("", artist_title).strip()
-            music_db[f"artist:{artist_name}"] = {
+    def get_music_db(self) -> dict:
+        get_music_db = {}
+        for artist in self._music():
+            artist_title = artist.title or "empty"
+            artist_thumb = artist.thumb or "empty"
+            artist_name = self.NON_ALPHANUMERIC.sub("", artist_title).strip()
+            db = {
                 "artist": artist_title,
                 "thumb": artist_thumb,
-                "tracks": self._get_tracks(artist),
+                # _get_tracks returns a dict.  Redis will not take a dict as a
+                # value and so the dict needs to be serialized.
+                "tracks": json.dumps(self._get_tracks(artist)),
             }
+            get_music_db[f"artist:{artist_name}"] = db
+            logger.debug(f"Added artist {artist_title} to the database")
         logger.info("Generated music database")
-        return music_db
+        return get_music_db
 
-    def _get_tracks(self, artist) -> str:
+    def _get_tracks(self, artist) -> dict:
         if artist.albums():
             track_db = {}
             for album in artist.albums():
                 for track in album.tracks():
-                    # Verify data exists.
-                    track_number = track.trackNumber or "NONE"
-                    track_name = track.title or "NONE"
-                    track_location = track.locations or "NONE"
+                    track_number = track.trackNumber or "empty"
+                    track_name = track.title or "empty"
+                    track_location = track.locations or "empty"
                     track_db[f"{album.title}:{album.year}"] = {
                         "track_number": track_number,
                         "track_name": track_name,
                         "track_location": track_location,
                     }
-            return json.dumps(track_db)
+            return track_db
         else:
-            return "NONE"
+            return {}
 
-    def package_libraries(self, movies=False, shows=False, music=False) -> dict:
+    def compile_libraries(self, movies=False, shows=False, music=False) -> dict:
         libraries_db = {}
-        if movies:
-            libraries_db.update(self.movies_db)
-        if shows:
-            libraries_db.update(self.shows_db)
-        if music:
-            libraries_db.update(self.music)
+        try:
+            if movies:
+                libraries_db.update(self.get_movies_db)
+                logger.debug("Added movies to libraries")
+            if shows:
+                libraries_db.update(self.get_shows_db)
+                logger.debug("Added shows to libraries")
+            if music:
+                libraries_db.update(self.get_music_db)
+                logger.debug("Added music to libraries")
 
-        logger.info("Libraries packaged")
-        return libraries_db
+            logger.info("Libraries packaged")
+            return libraries_db
+        except BadRequest as e:
+            logger.error(f"Failed to package libraries due to bad request: {e}")
+            raise
+        except NotFound as e:
+            logger.error(f"Failed to package libraries due to resource not found: {e}")
+            raise
+        except Exception as e:
+            logger.critical(f"Failed to package libraries due to unexpected error: {e}")
+            raise
