@@ -50,7 +50,7 @@ def upload():
 def ping():
     # pprint(get_redis_cluster_endpoint(cluster_id="mcrediscachecluster"))
     # cluster_endpoint, cluster_port = get_redis_cluster_endpoint(cluster_id="mcrediscachecluster")
-    cluster_endpoint = "mcredisreplicationgroup-001.mcredisreplicationgroup.nx2crn.usw1.cache.amazonaws.com"
+    cluster_endpoint = "<ENDPOINTHERE>"
     cluster_port = 6379
     redis_client = redis.StrictRedis(host=cluster_endpoint, port=cluster_port, decode_responses=True)
     print(redis_client.client_id())
