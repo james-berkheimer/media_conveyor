@@ -3,11 +3,14 @@ import os
 from pathlib import Path
 from typing import Any, Dict
 
-import json5 as json
+import json5
 
 # Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# logging.basicConfig(level=logging.INFO)
+# logger = logging.getLogger(__name__)
+from .utils import setup_logger
+
+logger = setup_logger()
 
 
 class Configuration:
@@ -43,12 +46,12 @@ class AWSConfigs(Configuration):
         for config_file in config_files:
             try:
                 with open(config_file, "r") as file:
-                    config_data = json.load(file)
+                    config_data = json5.load(file)
                     # Use the filename (without extension) as the key
                     key = config_file.stem
                     aws_state_data[key] = config_data
                     logger.info(f"Loaded configuration from {config_file}")
-            except (json.JSONDecodeError, FileNotFoundError) as e:
+            except (json5.JSONDecodeError, FileNotFoundError) as e:
                 # Handle JSON decoding errors or missing files
                 logger.error(f"Error processing {config_file}: {e}")
                 raise ValueError(f"Error processing {config_file}: {e}") from e

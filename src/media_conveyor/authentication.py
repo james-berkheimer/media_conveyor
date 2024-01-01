@@ -5,10 +5,13 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import boto3
-import json5 as json
+import json5
 from botocore.exceptions import BotoCoreError, ClientError
 
-logging.basicConfig(level=logging.INFO)
+# logging.basicConfig(level=logging.INFO)
+from .utils import setup_logger
+
+logger = setup_logger()
 
 
 class Authentication:
@@ -31,7 +34,7 @@ class Authentication:
             raise ValueError(f"Credentials file not found: {self.auth_file_path}")
 
         with open(self.auth_file_path) as auth_file:
-            return json.load(auth_file)
+            return json5.load(auth_file)
 
     def _mask_auth_data(self) -> Dict[str, Any]:
         # Mask sensitive data in auth_data for logging
@@ -80,7 +83,7 @@ class AWSCredentials(Authentication):
             }
         else:
             auth_data = None
-            logging.warning("No auth data provided for AWSCredentials, falling back to credentials.json")
+            logging.info("No auth data provided for AWSCredentials, falling back to credentials.json")
 
         super().__init__(auth_data=auth_data)
         logging.info("AWSCredentials initialized")

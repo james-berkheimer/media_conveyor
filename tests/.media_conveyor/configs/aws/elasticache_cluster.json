@@ -2,7 +2,6 @@
     "CacheClusterId": "MCRedisCacheCluster",
     "CacheNodeType": "cache.t2.micro",
     "Engine": "redis",
-    "EngineVersion": "6.2",  // Redis version
     "Port": 6379,
     "NumCacheNodes": 1,
     "PreferredAvailabilityZone": "us-west-1a",

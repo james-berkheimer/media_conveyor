@@ -1,0 +1,17 @@
+{
+    "ReplicationGroupId": "MCRedisReplicationGroup",
+    "ReplicationGroupDescription": "MC replication group",
+    "AutomaticFailoverEnabled": false,
+    "MultiAZEnabled": false,
+    "Engine": "redis",
+    // "EngineVersion": "7.1",  // Redis version
+    "CacheNodeType": "cache.t2.micro",
+    "NumNodeGroups": 1,
+    "ReplicasPerNodeGroup": 0,
+    "Port": 6379,
+    "TransitEncryptionEnabled": true,
+    "PreferredCacheClusterAZs": ["us-west-1a"],
+    "Tags": [
+        {"Key": "Name", "Value": "MC_ElastiCacheReplicationGroup"}
+    ]
+}

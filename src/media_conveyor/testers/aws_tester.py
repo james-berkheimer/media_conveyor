@@ -10,7 +10,10 @@ from botocore.exceptions import ParamValidationError
 
 from ..authentication import AWSCredentials
 from ..configurations import AWSConfigs
-from ..infrastructure import AWSResourceCreator
+from ..infrastructure import AWSResourceCreator, AWSStateData
+from ..utils import setup_logger
+
+setup_logger(level="INFO")
 
 media_conveyor_root = Path.home() / ".media_conveyor"
 project_root = Path(__file__).resolve().parent.parent.parent.parent
@@ -21,7 +24,7 @@ credentials.load()
 
 def aws_run():
     # Step 1: Configure logging to print to the console
-    logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler()])
+    # logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler()])
     # print("Hello, world!")
     # ec2_client = boto3.client("ec2")
     # ec2_client.describe_regions()
@@ -31,57 +34,32 @@ def aws_run():
     aws_config = AWSConfigs()
     resource_configs = aws_config.resolve_state()
     # pprint(resource_configs)
-    state_manager = AWSResourceCreator(resource_configs)
+    state_manager = AWSResourceCreator(resource_configs=resource_configs)
     state_manager.create_state()
 
 
 def aws_stop():
-    logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler()])
+    # logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler()])
 
     aws_config = AWSConfigs()
     resource_configs = aws_config.resolve_state()
-    state_manager = AWSResourceCreator(resource_configs)
+    state_manager = AWSResourceCreator(resource_configs=resource_configs)
     state_manager.terminate_state()
 
 
 def aws_test():
-    logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler()])
-    aws_config = AWSConfigs()
-    resource_configs = aws_config.resolve_state()
-    state_manager = AWSResourceCreator(resource_configs)
-    # state_manager._terminate_ec2_instance()
-    # state_manager._terminate_elasticache_cluster()
-    # state_manager._delete_cache_subnet_group()
-    state_manager._delete_vpc()
+    # aws_config = AWSConfigs()
+    # resource_configs = aws_config.resolve_state()
 
-    # vpc_id = state_manager.current_state["VpcId"]
-    # dependencies = state_manager._get_vpc_dependencies(vpc_id)
-    # security_groups = dependencies["SecurityGroups"]
-    # state_manager._delete_security_groups(security_groups)
+    # state_data = AWSStateData()
+    # cluster_id, cluster_port = state_data.get_elasticache_endpoint_and_port()
+    # print(cluster_id, cluster_port)
 
-    # sg_dependent = [sg for sg in security_groups if _is_dependent(sg)]
-    # sg_independent = [sg for sg in security_groups if not _is_dependent(sg)]
-    # for sg_list in [sg_dependent, sg_independent]:
-    #     for sg in sg_list:
-    #         sg_id = sg["GroupId"]
-    #         sg_name = sg["GroupName"]
-    #         print(sg_id, sg_name)
+    state_manager = AWSResourceCreator()
+    # state_manager._create_key_pair()
+    state_manager._delete_key_pair()
 
-    # for sg in security_groups:
-    #     sg_id = sg["GroupId"]
-    #     sg_name = sg["GroupName"]
-    #     if sg_name == "default":
-    #         continue
-    #     sg_tags = sg["Tags"]
-    #     print(sg_id, sg_name, sg_tags[0]["Value"])
-    # if sg_name == "MC_RedisSecurityGroup":
-    # if sg_name == "MC_EC2SecurityGroup":
-    #     state_manager.ec2_client.delete_security_group(GroupId=sg_id)
-
-    #     response = state_manager.ec2_client.describe_network_interfaces(
-    #         # Filters=[{"Name": "group-id", "Values": [sg_id]}]
-    #     )
-    #     pprint(response["NetworkInterfaces"])
+    pass
 
 
 def _is_dependent(sg):

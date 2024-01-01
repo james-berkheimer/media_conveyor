@@ -1,36 +1,40 @@
 from __future__ import annotations
 
 import json
-import logging
 import os
+from pathlib import Path
 from typing import Tuple
 
 import boto3
 import botocore
 from botocore.exceptions import BotoCoreError, ClientError
 
-from media_conveyor.exceptions import TerminationError
+from .exceptions import TerminationError
+from .utils import generate_password, set_file_permissions, setup_logger
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = setup_logger()
 
 
-class AWSResourceCreator:
-    def __init__(self, resource_configs: dict = None):
+class AWSBase:
+    def __init__(self, aws_state_path: str = None, resource_configs: dict = None):
         if resource_configs is None:
             resource_configs = {}
         self.resource_configs = resource_configs
-        media_conveyor_path = os.getenv("MEDIA_CONVEYOR")
-        if media_conveyor_path is None:
-            raise EnvironmentError("The MC_AWS_STATE environment variable is not set.")
-        self.aws_state_path = os.path.join(media_conveyor_path, "aws_state.json")
+        self.media_conveyor_path = Path(os.getenv("MEDIA_CONVEYOR"))
+
+        if aws_state_path is None:
+            if self.media_conveyor_path is None:
+                raise EnvironmentError("The MEDIA_CONVEYOR environment variable is not set.")
+            self.aws_state_path = self.media_conveyor_path / "aws_state.json"
+        else:
+            self.aws_state_path = aws_state_path
+
         self.ec2_client = boto3.client("ec2")
         self.elasticache_client = boto3.client("elasticache")
 
     @property
     def current_state(self):
-        logger.info("Accessing current_state property")
+        # logger.info("Accessing current_state property")
         try:
             with open(self.aws_state_path, "r") as file:
                 state_data = json.load(file)
@@ -48,13 +52,60 @@ class AWSResourceCreator:
         try:
             with open(self.aws_state_path, "w") as file:
                 json.dump(state_data, file, indent=4)
+            set_file_permissions(self.aws_state_path)
         except IOError:
             logger.error("Failed to write to the AWS state file. Check your file permissions.")
 
+    def get_current_state(self):
+        logger.info("Getting current AWS state")
+        return self.current_state
+
+    def _check_aws_credentials(self):
+        logger.info("Checking AWS credentials")
+        try:
+            self.ec2_client.describe_regions()
+        except botocore.exceptions.NoCredentialsError as err:
+            raise EnvironmentError("AWS credentials are not properly configured.") from err
+
+
+class AWSStateData(AWSBase):
+    def get_elasticache_endpoint_and_port(self):
+        replication_group_id = self.current_state.get("ReplicationGroupId", None)
+        if replication_group_id is None:
+            logger.error("Replication group ID not found in current state.")
+            return None
+
+        try:
+            response = self.elasticache_client.describe_replication_groups(ReplicationGroupId=replication_group_id)
+        except Exception as e:
+            logger.error(f"Failed to describe replication groups: {e}")
+            return None
+
+        # Assuming the replication group exists and has nodes
+        replication_group = response["ReplicationGroups"][0]
+        node_group = replication_group["NodeGroups"][0]
+        node_group_member = node_group["NodeGroupMembers"][0]
+
+        endpoint = node_group_member["ReadEndpoint"]["Address"]
+        port = node_group_member["ReadEndpoint"]["Port"]
+
+        logger.info(f"Retrieved endpoint: {endpoint} and port: {port} for replication group: {replication_group_id}")
+
+        return endpoint, port
+
+    def redis_params(self, db_number: int = 0) -> dict:
+        logger.info("Accessing redis_params property")
+        endpoint, port = self.get_elasticache_endpoint_and_port()
+        return {"host": endpoint, "port": port, "db": db_number}
+
+
+class AWSResourceCreator(AWSBase):
     def create_state(self):
-        logger.info("Creating new AWS state")
+        logger.info(">------------ Creating new AWS state ------------<")
         vpc_id = self._create_vpc()
         subnet_id = self._create_subnet(vpc_id)
+        internet_gateway_id = self._create_internet_gateway(vpc_id)
+        route_table_id = self._modify_route_table(vpc_id, internet_gateway_id)
         ec2_security_group_id = self._create_ec2_security_group(vpc_id)
         cache_security_group_id = self._create_elasticache_security_group(ec2_security_group_id, vpc_id)
         instance_id = self._create_ec2_instance(subnet_id, ec2_security_group_id)
@@ -66,48 +117,98 @@ class AWSResourceCreator:
         state_data = {
             "VpcId": vpc_id,
             "SubnetId": subnet_id,
-            "GroupIds": [ec2_security_group_id, cache_security_group_id],
+            "SecurityGroupIds": [ec2_security_group_id, cache_security_group_id],
             "CacheSubnetGroupName": cache_subnet_group_name,
             "InstanceIds": [instance_id],
             "CacheClusterId": cluster_id,
+            "InternetGatewayId": internet_gateway_id,
+            "RouteTableId": route_table_id,
         }
 
         self.current_state = state_data
 
-    def get_current_state(self):
-        logger.info("Getting current AWS state")
-        return self.current_state
-
     def terminate_state(self):
-        logger.info("Terminating AWS state")
+        logger.info("<------------ Terminating AWS state ------------>")
         if self.current_state is None:
             return
         try:
             self._terminate_ec2_instance()
             self._terminate_elasticache_cluster()
             self._delete_cache_subnet_group()
+            self._delete_subnets()
+            self._delete_security_groups()
+            self._delete_internet_gateways()
+            self._delete_route_tables()
             self._delete_vpc()
 
-            # Delete aws_state.json file after successful termination
-            if os.path.exists("aws_state.json"):
-                os.remove("aws_state.json")
-                logger.info("aws_state.json removed successfully")
+            # Clean up files after successful termination
+            if os.path.exists(self.aws_state_path):
+                try:
+                    os.remove(self.aws_state_path)
+                    logger.info("aws_state.json removed successfully")
+                except Exception as e:
+                    logger.error(f"Failed to remove aws_state.json. Error: {str(e)}")
             else:
                 logger.info("aws_state.json does not exist")
+
+            key_pair_path = self.media_conveyor_path / "mc_key_pair.pem"
+            if key_pair_path.exists():
+                try:
+                    os.remove(key_pair_path)
+                    logger.info(f"{key_pair_path} removed successfully")
+                except Exception as e:
+                    logger.error(f"Failed to remove {key_pair_path}. Error: {str(e)}")
+            else:
+                logger.info(f"{key_pair_path} does not exist")
+            self._delete_key_pair()
 
         except (BotoCoreError, ClientError) as e:
             logger.error(f"Failed to terminate state. Error: {str(e)}")
             raise TerminationError(str(e)) from e
 
+    def _delete_key_pair(self):
+        try:
+            response = self.ec2_client.delete_key_pair(KeyName="mc_key_pair")
+            if response["ResponseMetadata"]["HTTPStatusCode"] == 200:
+                logger.info("Key pair 'mc_key_pair' deleted successfully")
+            else:
+                logger.error("Failed to delete key pair 'mc_key_pair'")
+        except Exception as e:
+            logger.error(f"Failed to delete key pair 'mc_key_pair'. Error: {str(e)}")
+
     def _create_vpc(self) -> str:
         logger.info("Creating VPC")
-        return self._create_resource(self.ec2_client, "create_vpc", self.resource_configs.get("vpc", {}), "Vpc")
+        vpc_id = self._create_resource(self.ec2_client, "create_vpc", self.resource_configs.get("vpc", {}), "Vpc")
+        logger.info("Enabling DNS hostnames")
+        self.ec2_client.modify_vpc_attribute(VpcId=vpc_id, EnableDnsHostnames={"Value": True})
+        return vpc_id
 
     def _create_subnet(self, vpc_id) -> str:
         logger.info("Creating subnet for VPC: %s", vpc_id)
         params = self.resource_configs.get("subnet", {})
         params["VpcId"] = vpc_id
         return self._create_resource(self.ec2_client, "create_subnet", params, "Subnet")
+
+    def _create_internet_gateway(self, vpc_id: str) -> str:
+        logger.info("Creating Internet Gateway")
+        igw_id = self._create_resource(self.ec2_client, "create_internet_gateway", {}, "InternetGateway")
+
+        logger.info("Attaching Internet Gateway to VPC")
+        self.ec2_client.attach_internet_gateway(InternetGatewayId=igw_id, VpcId=vpc_id)
+
+        return igw_id
+
+    def _modify_route_table(self, vpc_id: str, igw_id: str):
+        logger.info("Modifying Route Table")
+        route_tables = self.ec2_client.describe_route_tables(Filters=[{"Name": "vpc-id", "Values": [vpc_id]}])[
+            "RouteTables"
+        ]
+        if route_tables:
+            route_table_id = route_tables[0]["RouteTableId"]
+            self.ec2_client.create_route(
+                RouteTableId=route_table_id, DestinationCidrBlock="0.0.0.0/0", GatewayId=igw_id
+            )
+        return route_table_id
 
     def _create_ec2_security_group(self, vpc_id: str) -> str:
         logger.info("Creating EC2 security group for VPC: %s", vpc_id)
@@ -150,12 +251,38 @@ class AWSResourceCreator:
             logger.info("Authorized ingress for Redis")
         return elasticache_security_group_id
 
+    def _create_key_pair(self):
+        key_pair_name = "mc_key_pair"
+        try:
+            print(f"Creating key pair {key_pair_name}")
+            key_pair = self.ec2_client.create_key_pair(KeyName=key_pair_name)
+            private_key = key_pair["KeyMaterial"]
+        except (BotoCoreError, ClientError) as e:
+            logger.error(f"Error creating key pair: {e}")
+            return None
+
+        key_pair_file = f"{key_pair_name}.pem"
+        key_pair_path = self.media_conveyor_path / key_pair_file
+
+        try:
+            with open(f"{key_pair_path}", "w") as file:
+                file.write(private_key)
+        except IOError as e:
+            logger.error(f"Error writing to key pair file: {e}")
+            return None
+
+        set_file_permissions(key_pair_path)
+
+        logger.info(f"Key pair {key_pair_file} created and stored in {self.media_conveyor_path}")
+        return key_pair_name
+
     def _create_ec2_instance(self, subnet_id, ec2_security_group_id) -> str:
         logger.info(
             "Creating EC2 instance for subnet: %s and security group: %s",
             subnet_id,
             ec2_security_group_id,
         )
+        key_pair_name = self._create_key_pair()
         params = self.resource_configs.get("ec2", {})
         params["NetworkInterfaces"] = [
             {
@@ -165,6 +292,7 @@ class AWSResourceCreator:
                 "AssociatePublicIpAddress": True,
             }
         ]
+        params["KeyName"] = key_pair_name
         return self._create_resource(self.ec2_client, "run_instances", params, "Instances")
 
     def _create_cache_subnet_group(self, subnet_id: str, vpc_id: str) -> str:
@@ -203,6 +331,30 @@ class AWSResourceCreator:
         )
         return resource_id
 
+    def _create_elasticache_replication_group(self, subnet_id, vpc_id, cache_security_group_id) -> Tuple[str, str]:
+        logger.info(
+            "Creating ElastiCache replication group for subnet: %s, VPC: %s and security group: %s",
+            subnet_id,
+            vpc_id,
+            cache_security_group_id,
+        )
+
+        params = self.resource_configs.get("elasticache_replication_group", {})
+        cache_subnet_group_name = self._create_cache_subnet_group(subnet_id, vpc_id)
+        params["CacheSubnetGroupName"] = cache_subnet_group_name
+        if params["CacheSubnetGroupName"] is None:
+            return None
+        params["SecurityGroupIds"] = [cache_security_group_id]
+        auth_token = generate_password()
+        params["AuthToken"] = auth_token
+        replication_group_id = self._create_resource(
+            self.elasticache_client,
+            "create_replication_group",
+            params,
+            "ReplicationGroup",
+        )
+        return cache_subnet_group_name, replication_group_id, auth_token
+
     def _create_elasticache_cluster(self, subnet_id, vpc_id, cache_security_group_id) -> Tuple[str, str]:
         logger.info(
             "Creating ElastiCache cluster for subnet: %s, VPC: %s and security group: %s",
@@ -211,7 +363,7 @@ class AWSResourceCreator:
             cache_security_group_id,
         )
 
-        params = self.resource_configs.get("elasticache", {})
+        params = self.resource_configs.get("elasticache_cluster", {})
         cache_subnet_group_name = self._create_cache_subnet_group(subnet_id, vpc_id)
         params["CacheSubnetGroupName"] = cache_subnet_group_name
         if params["CacheSubnetGroupName"] is None:
@@ -236,6 +388,8 @@ class AWSResourceCreator:
                 resource_id = response[resource_type][0]["InstanceId"]
             elif resource_type == "CacheSubnetGroup":
                 resource_id = response[resource_type]["CacheSubnetGroupName"]
+            elif resource_type == "ReplicationGroup":
+                resource_id = response[resource_type][resource_type + "Id"]
             else:
                 resource_id = response[resource_type][resource_type + "Id"]
             logger.info(f"{resource_type.capitalize()} created successfully. Id: {resource_id}")
@@ -246,7 +400,15 @@ class AWSResourceCreator:
 
     def _terminate_ec2_instance(self):
         logger.info("Terminating EC2 instance")
+        instance_ids = self.current_state.get("InstanceIds", [])
+        if not instance_ids:
+            logger.warning("InstanceIds key not found.")
+            return
+
         instance_ids = self.current_state["InstanceIds"]
+        if instance_ids == [None]:
+            logger.warning("No instance ids.")
+            return
 
         # Check if instances exist
         response = self.ec2_client.describe_instances(InstanceIds=instance_ids)
@@ -272,7 +434,15 @@ class AWSResourceCreator:
 
     def _terminate_elasticache_cluster(self):
         logger.info("Terminating ElastiCache cluster")
-        cluster_id = self.current_state["CacheClusterId"]
+        cluster_id = self.current_state.get("CacheClusterId", [])
+        if not cluster_id:
+            logger.warning("CacheClusterId key not found.")
+            return
+
+        if cluster_id is None:
+            logger.warning("No cluster group id.")
+            return
+
         try:
             response = self.elasticache_client.describe_cache_clusters(CacheClusterId=cluster_id)
         except self.elasticache_client.exceptions.CacheClusterNotFoundFault:
@@ -290,73 +460,93 @@ class AWSResourceCreator:
         waiter.wait(CacheClusterId=cluster_id)
         logger.info(f"ElastiCache cluster {cluster_id} has been terminated.")
 
+    def _terminate_elasticache_replication_group(self):
+        logger.info("Terminating ElastiCache replication group")
+        replication_group_id = self.current_state.get("ReplicationGroupId", [])
+        if not replication_group_id:
+            logger.warning("ReplicationGroupId key not found.")
+            return
+
+        if replication_group_id is None:
+            logger.warning("No replication group id.")
+            return
+        try:
+            response = self.elasticache_client.describe_replication_groups(ReplicationGroupId=replication_group_id)
+        except self.elasticache_client.exceptions.ReplicationGroupNotFoundFault:
+            logger.info(f"ElastiCache replication group {replication_group_id} does not exist.")
+            return
+
+        replication_group_status = response["ReplicationGroups"][0]["Status"]
+        if replication_group_status != "available":
+            logger.info(f"ElastiCache replication group {replication_group_id} is not in 'available' state.")
+            return
+
+        self.elasticache_client.delete_replication_group(ReplicationGroupId=replication_group_id)
+
+        waiter = self.elasticache_client.get_waiter("replication_group_deleted")
+        waiter.wait(ReplicationGroupId=replication_group_id)
+        logger.info(f"ElastiCache replication group {replication_group_id} has been terminated.")
+
     def _delete_cache_subnet_group(self):
         logger.info("Deleting cache subnet group")
-        cache_subnet_group_name = self.current_state["CacheSubnetGroupName"]
+        cache_subnet_group_name = self.current_state.get("CacheSubnetGroupName", [])
+        if not cache_subnet_group_name:
+            logger.warning("CacheSubnetGroupName key not found.")
+            return
+
         try:
             self.elasticache_client.describe_cache_subnet_groups(CacheSubnetGroupName=cache_subnet_group_name)
         except self.elasticache_client.exceptions.CacheSubnetGroupNotFoundFault:
-            logger.info(f"Cache subnet group {cache_subnet_group_name} does not exist.")
+            logger.warning(f"Cache subnet group {cache_subnet_group_name} does not exist.")
             return
+
         self.elasticache_client.delete_cache_subnet_group(CacheSubnetGroupName=cache_subnet_group_name)
         logger.info(f"Cache subnet group {cache_subnet_group_name} has been terminated.")
 
-    def _delete_vpc(self):
-        logger.info("Deleting VPC dependencies")
-        vpc_id = self.current_state["VpcId"]
-
-        try:
-            self.ec2_client.describe_vpcs(VpcIds=[vpc_id])
-        except self.ec2_client.exceptions.VpcIdNotFound:
-            logger.info(f"VPC {vpc_id} does not exist.")
+    def _delete_subnets(self):
+        logger.info("Deleting Subnet")
+        subnet_id = self.current_state.get("SubnetId", [])
+        if not subnet_id:
+            logger.warning("SubnetId key not found.")
             return
 
-        # Get VPC dependencies
-        dependencies = self._get_vpc_dependencies(vpc_id)
-
-        # Check if there are no dependencies
-        if not any(dependencies.values()):
-            logger.info(f"VPC {vpc_id} has no dependencies.")
-            try:
-                self.ec2_client.delete_vpc(VpcId=vpc_id)
-                logger.info(f"VPC {vpc_id} has been deleted.")
-            except self.ec2_client.exceptions.ClientError as e:
-                logger.error(f"Failed to delete VPC {vpc_id} due to: {e}")
-            return
-
-        # Delete dependencies in the correct order
-        self._delete_subnets(dependencies["Subnets"])
-        self._delete_security_groups(dependencies["SecurityGroups"])
-        # Add other delete methods as needed
-
         try:
-            self.ec2_client.delete_vpc(VpcId=vpc_id)
-            logger.info(f"VPC {vpc_id} has been deleted.")
+            # Check if the subnet exists
+            self.ec2_client.describe_subnets(SubnetIds=[subnet_id])
         except self.ec2_client.exceptions.ClientError as e:
-            logger.error(f"Failed to delete VPC {vpc_id} due to: {e}")
-            # logger.error(f"VPC {vpc_id} dependencies: {dependencies}")
+            if "InvalidSubnetID.NotFound" in str(e):
+                logger.warning(f"Subnet {subnet_id} does not exist.")
+                return
+            else:
+                raise
 
-    def _delete_subnets(self, subnets):
-        for subnet in subnets:
-            subnet_id = subnet["SubnetId"]
-            # Skip default subnets
-            if subnet["DefaultForAz"]:
-                continue
-            try:
-                self.ec2_client.delete_subnet(SubnetId=subnet_id)
-                logger.info(f"Subnet {subnet_id} has been deleted.")
-            except self.ec2_client.exceptions.ClientError as e:
-                logger.error(f"Failed to delete subnet {subnet_id}: {e}")
+        try:
+            self.ec2_client.delete_subnet(SubnetId=subnet_id)
+            logger.info(f"Subnet {subnet_id} has been deleted.")
+        except self.ec2_client.exceptions.ClientError as e:
+            logger.error(f"Failed to delete subnet {subnet_id}: {e}")
 
-    def _delete_security_groups(self, security_groups):
-        # Separate the security groups based on their dependencies
-        sg_dependent = [sg for sg in security_groups if self._is_dependent(sg)]
-        sg_independent = [sg for sg in security_groups if not self._is_dependent(sg)]
+    def _delete_security_groups(self):
+        logger.info("Starting the deletion of Security Groups")
+        security_group_ids = self.current_state.get("SecurityGroupIds", [])
+        if not security_group_ids:
+            logger.warning("No SecurityGroupIds found in the current state.")
+            return
 
-        # Delete the dependent security groups first
-        for sg_list in [sg_dependent, sg_independent]:
+        # Get the descriptions of the security groups
+        security_groups = self.ec2_client.describe_security_groups(GroupIds=security_group_ids)["SecurityGroups"]
+
+        # Separate MC_RedisSecurityGroup from the other security groups
+        sg_redis = [sg for sg in security_groups if sg["GroupName"] == "MC_RedisSecurityGroup"]
+        other_sgs = [sg for sg in security_groups if sg["GroupName"] != "MC_RedisSecurityGroup"]
+
+        logger.info(f"Found {len(sg_redis)} MC_RedisSecurityGroup and {len(other_sgs)} other Security Groups.")
+
+        # Delete MC_RedisSecurityGroup first, then the other security groups
+        for sg_list in [sg_redis, other_sgs]:
             for sg in sg_list:
                 sg_id = sg["GroupId"]
+                sg_name = sg["GroupName"]
                 if sg.get("GroupName") == "default":
                     logger.info(f"Skipping default Security Group {sg_id}.")
                     continue
@@ -365,62 +555,62 @@ class AWSResourceCreator:
                     instances = self.ec2_client.describe_instances(
                         Filters=[{"Name": "instance.group-id", "Values": [sg_id]}]
                     )["Reservations"]
+                    logger.debug(
+                        f"Found {len(instances)} instances associated with Security Group {sg_id}. Disassociating..."
+                    )
+
                     for instance in instances:
                         self.ec2_client.modify_instance_attribute(InstanceId=instance["InstanceId"], Groups=[])
+                        logger.debug(f"Disassociated Security Group {sg_id} from instance {instance['InstanceId']}.")
 
                     # Delete the security group
                     self.ec2_client.delete_security_group(GroupId=sg_id)
-                    logger.info(f"Security Group {sg_id} has been deleted.")
+                    logger.info(f"Successfully deleted Security Group {sg_name}:{sg_id}.")
                 except self.ec2_client.exceptions.ClientError as e:
-                    logger.error(f"Failed to delete Security Group {sg_id}: {e}")
+                    logger.error(f"Failed to delete Security Group {sg_id} due to: {e}")
+        logger.info("Finished deleting Security Groups.")
 
-    def _is_dependent(self, sg):
-        sg_id = sg["GroupId"]
+    def _delete_internet_gateways(self):
+        logger.info("Deleting Internet Gateway")
+        internet_gateway_id = self.current_state.get("InternetGatewayId", [])
+        vpc_id = self.current_state.get("VpcId", [])
+        if not internet_gateway_id or not vpc_id:
+            logger.warning("InternetGatewayId key not found.")
+            return
 
-        # Get the inbound rules
-        inbound_rules = self.ec2_client.describe_security_group_rules(
-            Filters=[{"Name": "group-id", "Values": [sg_id]}]
-        )["SecurityGroupRules"]
-
-        # Check if any inbound rule references another security group
-        for rule in inbound_rules:
-            if "ReferencedGroupId" in rule:
-                return True
-
-        # Get the security group details
-        sg_details = self.ec2_client.describe_security_groups(GroupIds=[sg_id])["SecurityGroups"][0]
-
-        # Get the outbound rules
-        outbound_rules = sg_details["IpPermissionsEgress"]
-
-        # Check if any outbound rule references another security group
-        for rule in outbound_rules:
-            if "UserIdGroupPairs" in rule:
-                for pair in rule["UserIdGroupPairs"]:
-                    if "GroupId" in pair:
-                        return True
-
-        # If no inbound or outbound rule references another security group, then the security group is not dependent
-        return False
-
-    def _get_vpc_dependencies(self, vpc_id):
-        # Get subnets
-        subnets = self.ec2_client.describe_subnets(Filters=[{"Name": "vpc-id", "Values": [vpc_id]}])["Subnets"]
-
-        # Get security groups
-        security_groups = self.ec2_client.describe_security_groups(Filters=[{"Name": "vpc-id", "Values": [vpc_id]}])[
-            "SecurityGroups"
-        ]
-
-        return {
-            "Subnets": subnets,
-            "SecurityGroups": security_groups,
-            # Add other resources as needed
-        }
-
-    def _check_aws_credentials(self):
-        logger.info("Checking AWS credentials")
         try:
-            self.ec2_client.describe_regions()
-        except botocore.exceptions.NoCredentialsError as err:
-            raise EnvironmentError("AWS credentials are not properly configured.") from err
+            self.ec2_client.detach_internet_gateway(InternetGatewayId=internet_gateway_id, VpcId=vpc_id)
+            self.ec2_client.delete_internet_gateway(InternetGatewayId=internet_gateway_id)
+            logger.info(f"Internet Gateway {internet_gateway_id} has been deleted.")
+        except self.ec2_client.exceptions.ClientError as e:
+            logger.error(f"Failed to delete Internet Gateway {internet_gateway_id} due to: {e}")
+
+    def _delete_route_tables(self):
+        logger.info("Deleting Route Table")
+        route_table_id = self.current_state.get("RouteTableId", [])
+        if not route_table_id:
+            logger.warning("RouteTableId key not found.")
+            return
+
+        try:
+            route_table = self.ec2_client.describe_route_tables(RouteTableIds=[route_table_id])["RouteTables"][0]
+            if route_table.get("Associations", [{}])[0].get("Main", False):
+                logger.info(f"Route Table {route_table_id} is a main route table and cannot be deleted.")
+            else:
+                self.ec2_client.delete_route_table(RouteTableId=route_table_id)
+                logger.info(f"Route Table {route_table_id} has been deleted.")
+        except self.ec2_client.exceptions.ClientError as e:
+            logger.error(f"Failed to delete Route Table {route_table_id} due to: {e}")
+
+    def _delete_vpc(self):
+        logger.info("Deleting VPC")
+        vpc_id = self.current_state.get("VpcId", [])
+        if not vpc_id:
+            logger.warning("VpcId key not found.")
+            return
+
+        try:
+            self.ec2_client.delete_vpc(VpcId=vpc_id)
+            logger.info(f"VPC {vpc_id} has been deleted.")
+        except self.ec2_client.exceptions.ClientError as e:
+            logger.error(f"Failed to delete VPC {vpc_id} due to: {e}")

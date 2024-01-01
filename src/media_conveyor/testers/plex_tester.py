@@ -11,6 +11,7 @@ from plexapi.server import PlexServer
 
 from ..authentication import PlexAuthentication
 from ..plex_data import PlexData
+from ..utils import setup_logger
 
 # from .plex_data import PlexMovies
 
@@ -65,13 +66,19 @@ def main():
     plex_auth = PlexAuthentication()
     PlexData(plex_auth.baseurl, plex_auth.token)
 
-    # db = plex_data.package_libraries(shows=False, music=False)
+    db = plex_data.compile_libraries(movies=True)
+    # db = plex_data.compile_libraries(shows=True)
+    # pprint(db)
+    for key, value in list(db.items())[:5]:
+        print(key)
+        pprint(value)
     # db = plex_data.package_libraries(movies=True)
     # for key, movie_dict in movies.items():
-    for key, movie_dict in list(hats.items())[:5]:
-        print(type(key), type(movie_dict))
-        print(key)
-        pprint(movie_dict)
+
+    # for key, movie_dict in list(hats.items())[:5]:
+    #     print(type(key), type(movie_dict))
+    #     print(key)
+    #     pprint(movie_dict)
 
     # json_object = json.dumps(db, indent=4)
 
