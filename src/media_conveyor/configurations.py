@@ -1,14 +1,10 @@
-import logging
 import os
 from pathlib import Path
 from typing import Any, Dict
 
 import json5
 
-# Set up logging
-# logging.basicConfig(level=logging.INFO)
-# logger = logging.getLogger(__name__)
-from .utils import setup_logger
+from .logging import setup_logger
 
 logger = setup_logger()
 
