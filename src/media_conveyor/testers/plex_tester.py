@@ -10,8 +10,8 @@ import json5 as json
 from plexapi.server import PlexServer
 
 from ..authentication import PlexAuthentication
+from ..logging import setup_logger
 from ..plex_data import PlexData
-from ..utils import setup_logger
 
 # from .plex_data import PlexMovies
 

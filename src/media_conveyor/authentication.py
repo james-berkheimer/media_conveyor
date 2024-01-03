@@ -1,5 +1,4 @@
 import copy
-import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -8,8 +7,7 @@ import boto3
 import json5
 from botocore.exceptions import BotoCoreError, ClientError
 
-# logging.basicConfig(level=logging.INFO)
-from .utils import setup_logger
+from .logging import setup_logger
 
 logger = setup_logger()
 
@@ -26,18 +24,18 @@ class Authentication:
 
         self.auth_file_path = media_conveyor_path / "credentials.json"
         self.auth_data = auth_data if auth_data is not None else self._resolve_auth()
-        logging.info(f"Authentication initialized with auth_data: {self._mask_auth_data()}")
+        logger.info(f"Authentication initialized with auth_data: {self._mask_auth_data()}")
 
     def _resolve_auth(self) -> Dict[str, Any]:
         if not os.path.exists(self.auth_file_path):
-            logging.error(f"Credentials file not found: {self.auth_file_path}")
+            logger.error(f"Credentials file not found: {self.auth_file_path}")
             raise ValueError(f"Credentials file not found: {self.auth_file_path}")
 
         with open(self.auth_file_path) as auth_file:
             return json5.load(auth_file)
 
     def _mask_auth_data(self) -> Dict[str, Any]:
-        # Mask sensitive data in auth_data for logging
+        # Mask sensitive data in auth_data for logger
         masked_auth_data = copy.deepcopy(self.auth_data)
         for service in masked_auth_data:
             for key in masked_auth_data[service]:
@@ -52,10 +50,10 @@ class PlexAuthentication(Authentication):
             auth_data = {"plex": {"baseurl": baseurl, "token": token}}
         else:
             auth_data = None
-            logging.warning("No auth data provided for PlexAuthentication, falling back to credentials.json")
+            logger.warning("No auth data provided for PlexAuthentication, falling back to credentials.json")
 
         super().__init__(auth_data=auth_data)
-        logging.info("PlexAuthentication initialized")
+        logger.info("PlexAuthentication initialized")
 
     @property
     def baseurl(self) -> str:
@@ -83,16 +81,16 @@ class AWSCredentials(Authentication):
             }
         else:
             auth_data = None
-            logging.info("No auth data provided for AWSCredentials, falling back to credentials.json")
+            logger.info("No auth data provided for AWSCredentials, falling back to credentials.json")
 
         super().__init__(auth_data=auth_data)
-        logging.info("AWSCredentials initialized")
+        logger.info("AWSCredentials initialized")
 
     def load(self) -> None:
         os.environ["AWS_ACCESS_KEY_ID"] = self.auth_data["aws"]["access_key_id"]
         os.environ["AWS_SECRET_ACCESS_KEY"] = self.auth_data["aws"]["secret_access_key"]
         os.environ["AWS_DEFAULT_REGION"] = self.auth_data["aws"]["region_name"]
-        logging.info("AWS credentials loaded")
+        logger.info("AWS credentials loaded")
         self.verify_credentials()
 
     def verify_credentials(self, aws_access_key_id=None, aws_secret_access_key=None, region_name=None):
@@ -105,7 +103,7 @@ class AWSCredentials(Authentication):
             region_name = self.auth_data["aws"]["region_name"]
 
         try:
-            logging.info("Verifying AWS credentials")
+            logger.info("Verifying AWS credentials")
             # Create a session using your credentials
             session = boto3.Session(
                 aws_access_key_id=aws_access_key_id,
@@ -120,9 +118,9 @@ class AWSCredentials(Authentication):
             # This will throw an exception if the credentials are not valid
             ec2_resource.instances.all().limit(1)
 
-            logging.info("AWS credentials are valid.")
+            logger.info("AWS credentials are valid.")
             return True
         except (BotoCoreError, ClientError) as e:
-            logging.error("AWS credentials are not valid.")
-            logging.error("Error: %s", e)
+            logger.error("AWS credentials are not valid.")
+            logger.error("Error: %s", e)
             return False

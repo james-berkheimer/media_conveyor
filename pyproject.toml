@@ -23,7 +23,9 @@ dependencies = [
     "json5",
     "redis",
     "boto3",
-    "colorlog"
+    "colorlog",
+    "sshtunnel",
+    "pydantic",
 ]
 
 [project.readme]
@@ -40,6 +42,9 @@ awst = "media_conveyor.testers.aws_tester:aws_test"
 awss = "media_conveyor.testers.aws_tester:aws_stop"
 rup = "media_conveyor.testers.redis_upload_tester:upload"
 rping = "media_conveyor.testers.redis_upload_tester:ping"
+rwrite = "media_conveyor.testers.redis_upload_tester:write"
+rread = "media_conveyor.testers.redis_upload_tester:read"
+rdelete = "media_conveyor.testers.redis_upload_tester:delete_db"
 
 [project.optional-dependencies]
 dev = [

@@ -9,8 +9,7 @@ from pathlib import Path
 from plexapi.exceptions import BadRequest, NotFound
 from plexapi.server import PlexServer
 
-# logger = logging.getLogger(__name__)
-from .utils import setup_logger
+from .logging import setup_logger
 
 logger = setup_logger()
 
@@ -19,6 +18,9 @@ class PlexData(PlexServer):
     NON_ALPHANUMERIC = re.compile(r"[^a-zA-Z0-9]")
 
     def __init__(self, baseurl=None, token=None, session=None, timeout=None):
+        self._movies_db = None
+        self._shows_db = None
+        self._music_db = None
         try:
             super().__init__(baseurl, token, session, timeout)
             self._movie_sections = self._get_sections("movie")
@@ -67,50 +69,52 @@ class PlexData(PlexServer):
 
     @property
     def get_movies_db(self) -> dict:
-        get_movies_db = {}
-        for movie in self._movies():
-            movie_title = movie.title or "empty"
-            movie_year = movie.year or "empty"
-            movie_thumb = movie.thumb or "empty"
-            movie_paths = movie.locations or "empty"
-            if movie_paths:
-                movie_paths = str(";".join(movie.locations))
+        if self._movies_db is None:
+            self._movies_db = {}
+            for movie in self._movies():
+                movie_title = movie.title or "empty"
+                movie_year = movie.year or "empty"
+                movie_thumb = movie.thumb or "empty"
+                movie_paths = movie.locations or "empty"
+                if movie_paths:
+                    movie_paths = str(";".join(movie.locations))
 
-            movie_name = self.NON_ALPHANUMERIC.sub("", movie.title).strip()
-            db = {
-                "title": movie_title,
-                "year": movie_year,
-                "file_path": movie_paths,
-                "thumb_path": movie_thumb,
-            }
-            get_movies_db[f"movie:{movie_name}:{movie.year}"] = db
-            logger.debug(f"Added movie {movie_title} to the database")
-        logger.info("Generated movies database")
-        return get_movies_db
+                movie_name = self.NON_ALPHANUMERIC.sub("", movie.title).strip()
+                db = {
+                    "title": movie_title,
+                    "year": movie_year,
+                    "file_path": movie_paths,
+                    "thumb_path": movie_thumb,
+                }
+                self._movies_db[f"movie:{movie_name}:{movie.year}"] = db
+                logger.debug(f"Added movie {movie_title} to the database")
+            logger.info("Generated movies database")
+        return self._movies_db
 
     @property
     def get_shows_db(self) -> dict:
-        get_shows_db = {}
-        for show in self._shows():
-            show_name = self.NON_ALPHANUMERIC.sub("", show.title).strip()
-            show_title = show.title or "empty"
-            show_year = show.year or "empty"
-            show_thumb = show.thumb or "empty"
+        if self._shows_db is None:
+            self._shows_db = {}
+            for show in self._shows():
+                show_name = self.NON_ALPHANUMERIC.sub("", show.title).strip()
+                show_title = show.title or "empty"
+                show_year = show.year or "empty"
+                show_thumb = show.thumb or "empty"
 
-            db = {
-                "title": show_title,
-                "year": show_year,
-                "thumb_path": show_thumb,
-                "show_location": show.locations[0],
-                # _get_episodes returns a dict.  Redis will not take a dict as a
-                # value and so the dict needs to be serialized.
-                "episodes": json.dumps(self._get_episodes(show)),
-            }
+                db = {
+                    "title": show_title,
+                    "year": show_year,
+                    "thumb_path": show_thumb,
+                    "show_location": show.locations[0],
+                    # _get_episodes returns a dict.  Redis will not take a dict as a
+                    # value and so the dict needs to be serialized.
+                    "episodes": json.dumps(self._get_episodes(show)),
+                }
 
-            get_shows_db[f"show:{show_name}:{show.year}"] = db
-            logger.debug(f"Added show {show_title} to the database")
+                self._shows_db[f"movie:{show_name}:{show.year}"] = db
+                logger.debug(f"Added show {show_title} to the database")
         logger.info("Generated TV shows database")
-        return get_shows_db
+        return self._shows_db
 
     def _get_episodes(self, show) -> dict:
         if show.seasons():
@@ -128,22 +132,23 @@ class PlexData(PlexServer):
 
     @property
     def get_music_db(self) -> dict:
-        get_music_db = {}
-        for artist in self._music():
-            artist_title = artist.title or "empty"
-            artist_thumb = artist.thumb or "empty"
-            artist_name = self.NON_ALPHANUMERIC.sub("", artist_title).strip()
-            db = {
-                "artist": artist_title,
-                "thumb": artist_thumb,
-                # _get_tracks returns a dict.  Redis will not take a dict as a
-                # value and so the dict needs to be serialized.
-                "tracks": json.dumps(self._get_tracks(artist)),
-            }
-            get_music_db[f"artist:{artist_name}"] = db
-            logger.debug(f"Added artist {artist_title} to the database")
+        if self._music_db is None:
+            self._music_db = {}
+            for artist in self._music():
+                artist_title = artist.title or "empty"
+                artist_thumb = artist.thumb or "empty"
+                artist_name = self.NON_ALPHANUMERIC.sub("", artist_title).strip()
+                db = {
+                    "artist": artist_title,
+                    "thumb": artist_thumb,
+                    # _get_tracks returns a dict.  Redis will not take a dict as a
+                    # value and so the dict needs to be serialized.
+                    "tracks": json.dumps(self._get_tracks(artist)),
+                }
+                self._music_db[f"artist:{artist_name}"] = db
+                logger.debug(f"Added artist {artist_title} to the database")
         logger.info("Generated music database")
-        return get_music_db
+        return self._music_db
 
     def _get_tracks(self, artist) -> dict:
         if artist.albums():
@@ -162,18 +167,30 @@ class PlexData(PlexServer):
         else:
             return {}
 
-    def compile_libraries(self, movies=False, shows=False, music=False) -> dict:
+    def compile_libraries(self, movies=False, shows=False, music=False, db_slice: slice = None) -> dict:
         libraries_db = {}
         try:
             if movies:
-                libraries_db.update(self.get_movies_db)
-                logger.debug("Added movies to libraries")
+                if db_slice:
+                    libraries_db.update({k: self.get_movies_db[k] for k in list(self.get_movies_db.keys())[db_slice]})
+                    logger.debug(f"Added movies to libraries with slice: {db_slice}")
+                else:
+                    libraries_db.update(self.get_movies_db)
+                    logger.debug("Added movies to libraries")
             if shows:
-                libraries_db.update(self.get_shows_db)
-                logger.debug("Added shows to libraries")
+                if db_slice:
+                    libraries_db.update({k: self.get_shows_db[k] for k in list(self.get_shows_db.keys())[db_slice]})
+                    logger.debug(f"Added shows to libraries with slice: {db_slice}")
+                else:
+                    libraries_db.update(self.get_shows_db)
+                    logger.debug("Added shows to libraries")
             if music:
-                libraries_db.update(self.get_music_db)
-                logger.debug("Added music to libraries")
+                if db_slice:
+                    libraries_db.update({k: self.get_music_db[k] for k in list(self.get_music_db.keys())[db_slice]})
+                    logger.debug(f"Added music to libraries with slice: {db_slice}")
+                else:
+                    libraries_db.update(self.get_music_db)
+                    logger.debug("Added music to libraries")
 
             logger.info("Libraries packaged")
             return libraries_db

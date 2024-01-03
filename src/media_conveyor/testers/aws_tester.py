@@ -11,7 +11,7 @@ from botocore.exceptions import ParamValidationError
 from ..authentication import AWSCredentials
 from ..configurations import AWSConfigs
 from ..infrastructure import AWSResourceCreator, AWSStateData
-from ..utils import setup_logger
+from ..logging import setup_logger
 
 setup_logger(level="INFO")
 

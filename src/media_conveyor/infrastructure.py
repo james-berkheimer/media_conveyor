@@ -3,14 +3,15 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Tuple
+from typing import Optional, Tuple
 
 import boto3
 import botocore
 from botocore.exceptions import BotoCoreError, ClientError
 
 from .exceptions import TerminationError
-from .utils import generate_password, set_file_permissions, setup_logger
+from .logging import setup_logger
+from .utils import generate_password, set_file_permissions
 
 logger = setup_logger()
 
@@ -69,34 +70,70 @@ class AWSBase:
 
 
 class AWSStateData(AWSBase):
-    def get_elasticache_endpoint_and_port(self):
-        replication_group_id = self.current_state.get("ReplicationGroupId", None)
-        if replication_group_id is None:
-            logger.error("Replication group ID not found in current state.")
-            return None
+    def __init__(self):
+        super().__init__()
+        self.ec2_details = self._get_ec2_ssh_details()
+        self.elasticache_details = self._get_elasticache_details()
 
-        try:
-            response = self.elasticache_client.describe_replication_groups(ReplicationGroupId=replication_group_id)
-        except Exception as e:
-            logger.error(f"Failed to describe replication groups: {e}")
-            return None
+        self.ec2_hostname = self.ec2_details.get("PublicDnsName")
+        self.ec2_username = self._get_ec2_username()
+        self.ec2_key_path = self._get_ec2_key_path()
+        self.redis_host, self.redis_port = self._get_redis_endpoint(self.elasticache_details)
+        self.local_port = 9000
 
-        # Assuming the replication group exists and has nodes
-        replication_group = response["ReplicationGroups"][0]
-        node_group = replication_group["NodeGroups"][0]
-        node_group_member = node_group["NodeGroupMembers"][0]
+        if not all([self.ec2_hostname, self.ec2_username, self.ec2_key_path, self.redis_host, self.redis_port]):
+            logger.error("One or more required attributes are None")
+            raise ValueError("One or more required attributes are None")
 
-        endpoint = node_group_member["ReadEndpoint"]["Address"]
-        port = node_group_member["ReadEndpoint"]["Port"]
+    def _get_ec2_username(self) -> str:
+        return self.current_state.get("UserName", "ec2-user")
 
-        logger.info(f"Retrieved endpoint: {endpoint} and port: {port} for replication group: {replication_group_id}")
+    def _get_ec2_key_path(self) -> str:
+        return self.media_conveyor_path / "mc_key_pair.pem"
 
-        return endpoint, port
+    def _get_ec2_ssh_details(self) -> dict:
+        instance_ids = self.current_state.get("InstanceIds", None)
+        if instance_ids is None:
+            logger.error("InstanceIds is None")
+            raise ValueError("InstanceIds is None")
+        response = self.ec2_client.describe_instances(InstanceIds=instance_ids)
+        return response.get("Reservations", [{}])[0].get("Instances", [{}])[0]
 
-    def redis_params(self, db_number: int = 0) -> dict:
-        logger.info("Accessing redis_params property")
-        endpoint, port = self.get_elasticache_endpoint_and_port()
-        return {"host": endpoint, "port": port, "db": db_number}
+    def _get_elasticache_details(self) -> Optional[dict]:
+        cluster_id = self.current_state.get("CacheClusterId", None)
+        if cluster_id:
+            response = self.elasticache_client.describe_cache_clusters(
+                CacheClusterId=cluster_id, ShowCacheNodeInfo=True
+            )
+            return response.get("CacheClusters", [{}])[0]
+        return None
+
+    def _get_redis_endpoint(self, elasticache_details: Optional[dict]) -> Tuple[str, int]:
+        if elasticache_details is None:
+            logger.warning("ElastiCache details are None. Using localhost and port 6379 as defaults.")
+            return "localhost", 6379
+        cache_nodes = elasticache_details.get("CacheNodes", [])
+        if cache_nodes:
+            endpoint = cache_nodes[0].get("Endpoint", {})
+            redis_host = endpoint.get("Address", "localhost")
+            redis_port = endpoint.get("Port", 6379)
+        else:
+            redis_host = "localhost"
+            redis_port = 6379
+        return redis_host, redis_port
+
+    def connection_params(self) -> dict:
+        logger.info("Accessing connection_params property")
+        params = {
+            "ssh_hostname": self.ec2_hostname,
+            "ssh_username": self.ec2_username,
+            "ssh_key_filepath": str(self.ec2_key_path),
+            "remote_hostname": self.redis_host,
+            "remote_port": self.redis_port,
+            "local_port": self.local_port,
+        }
+        logger.info(f"Connection parameters: {params}")
+        return params
 
 
 class AWSResourceCreator(AWSBase):
@@ -109,6 +146,7 @@ class AWSResourceCreator(AWSBase):
         ec2_security_group_id = self._create_ec2_security_group(vpc_id)
         cache_security_group_id = self._create_elasticache_security_group(ec2_security_group_id, vpc_id)
         instance_id = self._create_ec2_instance(subnet_id, ec2_security_group_id)
+        ec2_username = self.resource_configs.get("ec2", {}).get("UserName", "ec2-user")
         cache_subnet_group_name, cluster_id = self._create_elasticache_cluster(
             subnet_id, vpc_id, cache_security_group_id
         )
@@ -120,6 +158,7 @@ class AWSResourceCreator(AWSBase):
             "SecurityGroupIds": [ec2_security_group_id, cache_security_group_id],
             "CacheSubnetGroupName": cache_subnet_group_name,
             "InstanceIds": [instance_id],
+            "UserName": ec2_username,
             "CacheClusterId": cluster_id,
             "InternetGatewayId": internet_gateway_id,
             "RouteTableId": route_table_id,
@@ -284,6 +323,9 @@ class AWSResourceCreator(AWSBase):
         )
         key_pair_name = self._create_key_pair()
         params = self.resource_configs.get("ec2", {})
+        # Assuming params is your dictionary
+        if "UserName" in params:
+            del params["UserName"]
         params["NetworkInterfaces"] = [
             {
                 "DeviceIndex": 0,
