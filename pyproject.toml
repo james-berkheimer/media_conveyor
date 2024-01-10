@@ -17,16 +17,20 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
-requires-python = ">=3.7"
+requires-python = ">=3.9"
 dependencies = [
-    "plexapi",
-    "json5",
-    "redis",
     "boto3",
     "colorlog",
-    "sshtunnel",
+    "django",
+    "djangorestframework",
+    "json5",
+    "redis",
+    "pillow",
+    "plexapi",
     "pydantic",
+    "sshtunnel",
 ]
+
 
 [project.readme]
 file = "README.md"
