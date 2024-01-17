@@ -31,7 +31,7 @@ def write():
     aws_state = AWSStateData()
     plex_auth = PlexAuthentication()
     plex_data = PlexData(plex_auth.baseurl, plex_auth.token)
-    plex_db = plex_data.compile_libraries(movies=True, db_slice=slice(100, 105))
+    plex_db = plex_data.compile_libraries(movies=True, shows=True, db_slice=slice(100, 105))
     config = TunnelConfig(**aws_state.connection_params())
     with SSHTunnel(config) as _:
         redis_client = RedisPlexDB(plex_db=plex_db)

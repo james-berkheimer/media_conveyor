@@ -23,6 +23,7 @@ dependencies = [
     "colorlog",
     "django",
     "djangorestframework",
+    "jinja2",
     "json5",
     "redis",
     "pillow",
@@ -45,10 +46,10 @@ awsr = "media_conveyor.testers.aws_tester:aws_run"
 awst = "media_conveyor.testers.aws_tester:aws_test"
 awss = "media_conveyor.testers.aws_tester:aws_stop"
 rup = "media_conveyor.testers.redis_upload_tester:upload"
-rping = "media_conveyor.testers.redis_upload_tester:ping"
-rwrite = "media_conveyor.testers.redis_upload_tester:write"
-rread = "media_conveyor.testers.redis_upload_tester:read"
-rdelete = "media_conveyor.testers.redis_upload_tester:delete_db"
+rping = "media_conveyor.testers.redis_tester:ping"
+rwrite = "media_conveyor.testers.redis_tester:write"
+rread = "media_conveyor.testers.redis_tester:read"
+rdelete = "media_conveyor.testers.redis_tester:delete_db"
 
 [project.optional-dependencies]
 dev = [
@@ -108,4 +109,4 @@ ignore = [
     "N802",
     "F401"
 ]
-line-length = 120
+line-length = 100

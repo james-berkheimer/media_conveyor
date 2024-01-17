@@ -81,7 +81,15 @@ class AWSStateData(AWSBase):
         self.redis_host, self.redis_port = self._get_redis_endpoint(self.elasticache_details)
         self.local_port = 9000
 
-        if not all([self.ec2_hostname, self.ec2_username, self.ec2_key_path, self.redis_host, self.redis_port]):
+        if not all(
+            [
+                self.ec2_hostname,
+                self.ec2_username,
+                self.ec2_key_path,
+                self.redis_host,
+                self.redis_port,
+            ]
+        ):
             logger.error("One or more required attributes are None")
             raise ValueError("One or more required attributes are None")
 
@@ -110,7 +118,9 @@ class AWSStateData(AWSBase):
 
     def _get_redis_endpoint(self, elasticache_details: Optional[dict]) -> Tuple[str, int]:
         if elasticache_details is None:
-            logger.warning("ElastiCache details are None. Using localhost and port 6379 as defaults.")
+            logger.warning(
+                "ElastiCache details are None. Using localhost and port 6379 as defaults."
+            )
             return "localhost", 6379
         cache_nodes = elasticache_details.get("CacheNodes", [])
         if cache_nodes:
@@ -144,7 +154,9 @@ class AWSResourceCreator(AWSBase):
         internet_gateway_id = self._create_internet_gateway(vpc_id)
         route_table_id = self._modify_route_table(vpc_id, internet_gateway_id)
         ec2_security_group_id = self._create_ec2_security_group(vpc_id)
-        cache_security_group_id = self._create_elasticache_security_group(ec2_security_group_id, vpc_id)
+        cache_security_group_id = self._create_elasticache_security_group(
+            ec2_security_group_id, vpc_id
+        )
         instance_id = self._create_ec2_instance(subnet_id, ec2_security_group_id)
         ec2_username = self.resource_configs.get("ec2", {}).get("UserName", "ec2-user")
         cache_subnet_group_name, cluster_id = self._create_elasticache_cluster(
@@ -217,7 +229,9 @@ class AWSResourceCreator(AWSBase):
 
     def _create_vpc(self) -> str:
         logger.info("Creating VPC")
-        vpc_id = self._create_resource(self.ec2_client, "create_vpc", self.resource_configs.get("vpc", {}), "Vpc")
+        vpc_id = self._create_resource(
+            self.ec2_client, "create_vpc", self.resource_configs.get("vpc", {}), "Vpc"
+        )
         logger.info("Enabling DNS hostnames")
         self.ec2_client.modify_vpc_attribute(VpcId=vpc_id, EnableDnsHostnames={"Value": True})
         return vpc_id
@@ -230,7 +244,9 @@ class AWSResourceCreator(AWSBase):
 
     def _create_internet_gateway(self, vpc_id: str) -> str:
         logger.info("Creating Internet Gateway")
-        igw_id = self._create_resource(self.ec2_client, "create_internet_gateway", {}, "InternetGateway")
+        igw_id = self._create_resource(
+            self.ec2_client, "create_internet_gateway", {}, "InternetGateway"
+        )
 
         logger.info("Attaching Internet Gateway to VPC")
         self.ec2_client.attach_internet_gateway(InternetGatewayId=igw_id, VpcId=vpc_id)
@@ -239,9 +255,9 @@ class AWSResourceCreator(AWSBase):
 
     def _modify_route_table(self, vpc_id: str, igw_id: str):
         logger.info("Modifying Route Table")
-        route_tables = self.ec2_client.describe_route_tables(Filters=[{"Name": "vpc-id", "Values": [vpc_id]}])[
-            "RouteTables"
-        ]
+        route_tables = self.ec2_client.describe_route_tables(
+            Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
+        )["RouteTables"]
         if route_tables:
             route_table_id = route_tables[0]["RouteTableId"]
             self.ec2_client.create_route(
@@ -256,11 +272,15 @@ class AWSResourceCreator(AWSBase):
             logger.error("Resource_type 'ec2' not found in security_group configs")
             return None
         params["VpcId"] = vpc_id
-        ec2_security_group_id = self._create_resource(self.ec2_client, "create_security_group", params, "GroupId")
+        ec2_security_group_id = self._create_resource(
+            self.ec2_client, "create_security_group", params, "GroupId"
+        )
 
         if ec2_security_group_id:
             # Authorize inbound traffic to the EC2 security group (example: allow SSH)
-            ip_permissions = self.resource_configs.get("security_group", {}).get("ec2_ip_permissions", [])
+            ip_permissions = self.resource_configs.get("security_group", {}).get(
+                "ec2_ip_permissions", []
+            )
             self.ec2_client.authorize_security_group_ingress(
                 GroupId=ec2_security_group_id, IpPermissions=ip_permissions
             )
@@ -280,7 +300,9 @@ class AWSResourceCreator(AWSBase):
 
         if elasticache_security_group_id:
             # Authorize ingress for Redis (example: allow access from your EC2 security group)
-            ip_permissions = self.resource_configs.get("security_group", {}).get("cache_ip_permissions", [])
+            ip_permissions = self.resource_configs.get("security_group", {}).get(
+                "cache_ip_permissions", []
+            )
             for permission in ip_permissions:
                 permission["UserIdGroupPairs"] = [{"GroupId": ec2_security_group_id}]
             self.ec2_client.authorize_security_group_ingress(
@@ -373,7 +395,9 @@ class AWSResourceCreator(AWSBase):
         )
         return resource_id
 
-    def _create_elasticache_replication_group(self, subnet_id, vpc_id, cache_security_group_id) -> Tuple[str, str]:
+    def _create_elasticache_replication_group(
+        self, subnet_id, vpc_id, cache_security_group_id
+    ) -> Tuple[str, str]:
         logger.info(
             "Creating ElastiCache replication group for subnet: %s, VPC: %s and security group: %s",
             subnet_id,
@@ -397,7 +421,9 @@ class AWSResourceCreator(AWSBase):
         )
         return cache_subnet_group_name, replication_group_id, auth_token
 
-    def _create_elasticache_cluster(self, subnet_id, vpc_id, cache_security_group_id) -> Tuple[str, str]:
+    def _create_elasticache_cluster(
+        self, subnet_id, vpc_id, cache_security_group_id
+    ) -> Tuple[str, str]:
         logger.info(
             "Creating ElastiCache cluster for subnet: %s, VPC: %s and security group: %s",
             subnet_id,
@@ -468,7 +494,9 @@ class AWSResourceCreator(AWSBase):
             current_state = instance["CurrentState"]["Name"]
             previous_state = instance["PreviousState"]["Name"]
 
-            logger.info(f"Instance {instance_id} transitioning from '{previous_state}' to '{current_state}'")
+            logger.info(
+                f"Instance {instance_id} transitioning from '{previous_state}' to '{current_state}'"
+            )
 
             waiter = self.ec2_client.get_waiter("instance_terminated")
             waiter.wait(InstanceIds=[instance_id])
@@ -513,14 +541,18 @@ class AWSResourceCreator(AWSBase):
             logger.warning("No replication group id.")
             return
         try:
-            response = self.elasticache_client.describe_replication_groups(ReplicationGroupId=replication_group_id)
+            response = self.elasticache_client.describe_replication_groups(
+                ReplicationGroupId=replication_group_id
+            )
         except self.elasticache_client.exceptions.ReplicationGroupNotFoundFault:
             logger.info(f"ElastiCache replication group {replication_group_id} does not exist.")
             return
 
         replication_group_status = response["ReplicationGroups"][0]["Status"]
         if replication_group_status != "available":
-            logger.info(f"ElastiCache replication group {replication_group_id} is not in 'available' state.")
+            logger.info(
+                f"ElastiCache replication group {replication_group_id} is not in 'available' state."
+            )
             return
 
         self.elasticache_client.delete_replication_group(ReplicationGroupId=replication_group_id)
@@ -537,12 +569,16 @@ class AWSResourceCreator(AWSBase):
             return
 
         try:
-            self.elasticache_client.describe_cache_subnet_groups(CacheSubnetGroupName=cache_subnet_group_name)
+            self.elasticache_client.describe_cache_subnet_groups(
+                CacheSubnetGroupName=cache_subnet_group_name
+            )
         except self.elasticache_client.exceptions.CacheSubnetGroupNotFoundFault:
             logger.warning(f"Cache subnet group {cache_subnet_group_name} does not exist.")
             return
 
-        self.elasticache_client.delete_cache_subnet_group(CacheSubnetGroupName=cache_subnet_group_name)
+        self.elasticache_client.delete_cache_subnet_group(
+            CacheSubnetGroupName=cache_subnet_group_name
+        )
         logger.info(f"Cache subnet group {cache_subnet_group_name} has been terminated.")
 
     def _delete_subnets(self):
@@ -576,13 +612,17 @@ class AWSResourceCreator(AWSBase):
             return
 
         # Get the descriptions of the security groups
-        security_groups = self.ec2_client.describe_security_groups(GroupIds=security_group_ids)["SecurityGroups"]
+        security_groups = self.ec2_client.describe_security_groups(GroupIds=security_group_ids)[
+            "SecurityGroups"
+        ]
 
         # Separate MC_RedisSecurityGroup from the other security groups
         sg_redis = [sg for sg in security_groups if sg["GroupName"] == "MC_RedisSecurityGroup"]
         other_sgs = [sg for sg in security_groups if sg["GroupName"] != "MC_RedisSecurityGroup"]
 
-        logger.info(f"Found {len(sg_redis)} MC_RedisSecurityGroup and {len(other_sgs)} other Security Groups.")
+        logger.info(
+            f"Found {len(sg_redis)} MC_RedisSecurityGroup and {len(other_sgs)} other Security Groups."
+        )
 
         # Delete MC_RedisSecurityGroup first, then the other security groups
         for sg_list in [sg_redis, other_sgs]:
@@ -602,8 +642,12 @@ class AWSResourceCreator(AWSBase):
                     )
 
                     for instance in instances:
-                        self.ec2_client.modify_instance_attribute(InstanceId=instance["InstanceId"], Groups=[])
-                        logger.debug(f"Disassociated Security Group {sg_id} from instance {instance['InstanceId']}.")
+                        self.ec2_client.modify_instance_attribute(
+                            InstanceId=instance["InstanceId"], Groups=[]
+                        )
+                        logger.debug(
+                            f"Disassociated Security Group {sg_id} from instance {instance['InstanceId']}."
+                        )
 
                     # Delete the security group
                     self.ec2_client.delete_security_group(GroupId=sg_id)
@@ -621,7 +665,9 @@ class AWSResourceCreator(AWSBase):
             return
 
         try:
-            self.ec2_client.detach_internet_gateway(InternetGatewayId=internet_gateway_id, VpcId=vpc_id)
+            self.ec2_client.detach_internet_gateway(
+                InternetGatewayId=internet_gateway_id, VpcId=vpc_id
+            )
             self.ec2_client.delete_internet_gateway(InternetGatewayId=internet_gateway_id)
             logger.info(f"Internet Gateway {internet_gateway_id} has been deleted.")
         except self.ec2_client.exceptions.ClientError as e:
@@ -635,9 +681,13 @@ class AWSResourceCreator(AWSBase):
             return
 
         try:
-            route_table = self.ec2_client.describe_route_tables(RouteTableIds=[route_table_id])["RouteTables"][0]
+            route_table = self.ec2_client.describe_route_tables(RouteTableIds=[route_table_id])[
+                "RouteTables"
+            ][0]
             if route_table.get("Associations", [{}])[0].get("Main", False):
-                logger.info(f"Route Table {route_table_id} is a main route table and cannot be deleted.")
+                logger.info(
+                    f"Route Table {route_table_id} is a main route table and cannot be deleted."
+                )
             else:
                 self.ec2_client.delete_route_table(RouteTableId=route_table_id)
                 logger.info(f"Route Table {route_table_id} has been deleted.")

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+        background-color: #313131;
+        color: #e8e8e8; /* Light grey color for text */
+    }
+    #container {
+      display: flex;
+      height: 100vh;
+      width: 100%;
+    }
+
+    #left, #right {
+      background: #313131;
+      width: 50%;
+      transition: width 0.5s;
+    }
+
+    #divider {
+      width: 10px;
+      background: #000;
+      cursor: col-resize;
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <div id="left"></div>
+    <div id="divider"></div>
+    <div id="right"></div>
+  </div>
+
+  <script>
+    const container = document.getElementById('container');
+    const divider = document.getElementById('divider');
+    let isDragging = false;
+
+    divider.addEventListener('mousedown', function(e) {
+      isDragging = true;
+    });
+
+    window.addEventListener('mouseup', function(e) {
+      isDragging = false;
+    });
+
+    window.addEventListener('mousemove', function(e) {
+      if (!isDragging) return;
+      let containerRect = container.getBoundingClientRect();
+      let newWidth = ((e.clientX - containerRect.left) / containerRect.width) * 100;
+      document.getElementById('left').style.width = `${newWidth}%`;
+      document.getElementById('right').style.width = `${100 - newWidth}%`;
+    });
+  </script>
+</body>
+</html>

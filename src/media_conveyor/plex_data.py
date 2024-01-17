@@ -3,6 +3,7 @@ from __future__ import annotations
 # import json5 as json
 import json
 import re
+import time
 from pathlib import Path
 
 from plexapi.exceptions import BadRequest, NotFound
@@ -38,17 +39,23 @@ class PlexData(PlexServer):
 
     def _get_sections(self, section_type):
         try:
-            sections = [section for section in self.library.sections() if section.type == section_type]
+            sections = [
+                section for section in self.library.sections() if section.type == section_type
+            ]
             logger.debug(f"Retrieved {len(sections)} {section_type} sections")
             return sections
         except BadRequest as e:
             logger.error(f"Failed to get sections of type {section_type} due to bad request: {e}")
             raise
         except NotFound as e:
-            logger.error(f"Failed to get sections of type {section_type} due to resource not found: {e}")
+            logger.error(
+                f"Failed to get sections of type {section_type} due to resource not found: {e}"
+            )
             raise
         except Exception as e:
-            logger.critical(f"Failed to get sections of type {section_type} due to unexpected error: {e}")
+            logger.critical(
+                f"Failed to get sections of type {section_type} due to unexpected error: {e}"
+            )
             raise
 
     def _movies(self) -> list:
@@ -56,10 +63,11 @@ class PlexData(PlexServer):
         logger.info(f"Retrieved {len(movies)} movies")
         return movies
 
-    def _shows(self) -> list:
-        shows = [show for section in self._shows_sections for show in section.all()]
-        logger.info(f"Retrieved {len(shows)} shows")
-        return shows
+    def _shows(self) -> dict:
+        shows_dict = {section.title: list(section.all()) for section in self._shows_sections}
+        for title, shows in shows_dict.items():
+            logger.info(f"Retrieved {len(shows)} shows from '{title}' section")
+        return shows_dict
 
     def _music(self) -> list:
         music = [music for section in self._music_sections for music in section.all()]
@@ -75,8 +83,9 @@ class PlexData(PlexServer):
                 movie_year = movie.year or "empty"
                 movie_thumb = movie.thumb or "empty"
                 movie_paths = movie.locations or "empty"
-                if movie_paths:
-                    movie_paths = str(";".join(movie.locations))
+                if movie_paths != "empty":
+                    movie_paths = [path.replace("/media", "", 1) for path in movie_paths]
+                    movie_paths = str(";".join(movie_paths))
 
                 movie_name = self.NON_ALPHANUMERIC.sub("", movie.title).strip()
                 db = {
@@ -94,25 +103,40 @@ class PlexData(PlexServer):
     def get_shows_db(self) -> dict:
         if self._shows_db is None:
             self._shows_db = {}
-            for show in self._shows():
-                show_name = self.NON_ALPHANUMERIC.sub("", show.title).strip()
-                show_title = show.title or "empty"
-                show_year = show.year or "empty"
-                show_thumb = show.thumb or "empty"
+            total_get_episodes_time = 0
+            total_json_dumps_time = 0
+            for section_title, shows in self._shows().items():
+                section_name = section_title.lower().replace(" ", "_")
+                for show in shows:
+                    show_name = self.NON_ALPHANUMERIC.sub("", show.title).strip()
+                    show_title = show.title or "empty"
+                    show_year = show.year or "empty"
+                    show_thumb = show.thumb or "empty"
 
-                db = {
-                    "title": show_title,
-                    "year": show_year,
-                    "thumb_path": show_thumb,
-                    "show_location": show.locations[0],
-                    # _get_episodes returns a dict.  Redis will not take a dict as a
-                    # value and so the dict needs to be serialized.
-                    "episodes": json.dumps(self._get_episodes(show)),
-                }
+                    start_time = time.time()
+                    episodes = self._get_episodes(show)
+                    end_time = time.time()
+                    total_get_episodes_time += end_time - start_time
 
-                self._shows_db[f"movie:{show_name}:{show.year}"] = db
-                logger.debug(f"Added show {show_title} to the database")
-        logger.info("Generated TV shows database")
+                    start_time = time.time()
+                    serialized_episodes = json.dumps(episodes)
+                    end_time = time.time()
+                    total_json_dumps_time += end_time - start_time
+
+                    db = {
+                        "title": show_title,
+                        "year": show_year,
+                        "thumb_path": show_thumb,
+                        "show_location": show.locations[0],
+                        "episodes": serialized_episodes,
+                    }
+
+                    self._shows_db[f"{section_name}:{show_name}:{show.year}"] = db
+                    logger.debug(f"Added show {show_title} to the database")
+
+            logger.debug(f"_get_episodes took a total of {total_get_episodes_time} seconds")
+            logger.debug(f"json.dumps took a total of {total_json_dumps_time} seconds")
+            logger.info("Generated Shows database")
         return self._shows_db
 
     def _get_episodes(self, show) -> dict:
@@ -121,9 +145,15 @@ class PlexData(PlexServer):
             for season in show.seasons():
                 episode_dict[f"season:{season.seasonNumber}"] = {}
                 for episode in season.episodes():
-                    episode_dict[f"season:{season.seasonNumber}"][f"episode:{episode.episodeNumber}"] = {
+                    episode_paths = episode.locations or "empty"
+                    if episode_paths != "empty":
+                        episode_paths = [path.replace("/media", "", 1) for path in episode_paths]
+                        episode_paths = str(";".join(episode_paths))
+                    episode_dict[f"season:{season.seasonNumber}"][
+                        f"episode:{episode.episodeNumber}"
+                    ] = {
                         "episode_name": episode.title,
-                        "episode_filename": Path(episode.locations[0]).stem,
+                        "episode_filename": episode_paths,
                     }
             return episode_dict
         else:
@@ -157,6 +187,9 @@ class PlexData(PlexServer):
                     track_number = track.trackNumber or "empty"
                     track_name = track.title or "empty"
                     track_location = track.locations or "empty"
+                    if track_location != "empty":
+                        track_location = [path.replace("/media", "", 1) for path in track_location]
+                        track_location = str(";".join(track_location))
                     track_db[f"{album.title}:{album.year}"] = {
                         "track_number": track_number,
                         "track_name": track_name,
@@ -166,29 +199,36 @@ class PlexData(PlexServer):
         else:
             return {}
 
-    def compile_libraries(self, movies=False, shows=False, music=False, db_slice: slice = None) -> dict:
+    def compile_libraries(
+        self, movies=False, shows=False, music=False, db_slice: slice = None
+    ) -> dict:
         libraries_db = {}
         try:
             if movies:
+                movies_db = self.get_movies_db
                 if db_slice:
-                    libraries_db.update({k: self.get_movies_db[k] for k in list(self.get_movies_db.keys())[db_slice]})
+                    libraries_db.update({k: movies_db[k] for k in list(movies_db.keys())[db_slice]})
                     logger.debug(f"Added movies to libraries with slice: {db_slice}")
                 else:
-                    libraries_db.update(self.get_movies_db)
+                    libraries_db.update(movies_db)
                     logger.debug("Added movies to libraries")
+
             if shows:
+                shows_db = self.get_shows_db
                 if db_slice:
-                    libraries_db.update({k: self.get_shows_db[k] for k in list(self.get_shows_db.keys())[db_slice]})
+                    libraries_db.update({k: shows_db[k] for k in list(shows_db.keys())[db_slice]})
                     logger.debug(f"Added shows to libraries with slice: {db_slice}")
                 else:
-                    libraries_db.update(self.get_shows_db)
+                    libraries_db.update(shows_db)
                     logger.debug("Added shows to libraries")
+
             if music:
+                music_db = self.get_music_db
                 if db_slice:
-                    libraries_db.update({k: self.get_music_db[k] for k in list(self.get_music_db.keys())[db_slice]})
+                    libraries_db.update({k: music_db[k] for k in list(music_db.keys())[db_slice]})
                     logger.debug(f"Added music to libraries with slice: {db_slice}")
                 else:
-                    libraries_db.update(self.get_music_db)
+                    libraries_db.update(music_db)
                     logger.debug("Added music to libraries")
 
             logger.info("Libraries packaged")

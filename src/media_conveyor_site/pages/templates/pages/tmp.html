@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css">
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
+  <style>
+    body {
+        background-color: #313131;
+        color: #e8e8e8; /* Light grey color for text */
+    }
+    /* .container {
+        background-color: #313131;
+        width: 1630px;
+        padding-right: 500px;
+        border: none;
+    } */
+    .list-group-item, .card {
+        background-color: #313131; /* Same background for list items and cards */
+        border-color: #e8e8e8; /* Light grey border for list items and cards */
+    }
+    .panel-default>.panel-heading {
+        background-color: #313131;
+        color: #e8e8e8;
+    }
+    .panel-group {
+      margin-bottom: 0;
+      border-radius: 0;
+      color: #e8e8e8;
+    }
+    .panel {
+      background-color: #313131; /* Dark background color for panels */
+    }
+    .panel-heading {
+      background-color: #313131;
+    }
+    .show-title {
+        background-color: #313131;
+        color: #e8e8e8;
+        font-size: 2em;
+    }
+    .season-title {
+        background-color: #313131;
+        color: #e8e8e8;
+        font-size: 1.5em;
+    }
+    .navbar-divider {
+        border-left: 3px solid #535353;
+        height: 50px; /* adjust this value as needed */
+        position: absolute;
+        top: 50%;
+        left: 160px; /* adjust this value as needed */
+        transform: translateY(-50%);
+    }
+  </style>
+</head>
+<body>
+    <nav class="navbar navbar-inverse">
+        <div class="container-fluid">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="#">Media Conveyor</a>
+            </div>
+            <span class="navbar-divider"></span>
+            <ul class="nav navbar-nav">
+                <!-- <li class="active"><a href="#">Home</a></li> -->
+                <li><a href="#">Television</a></li>
+                <li><a href="#">Documentaries</a></li>
+                <li><a href="#">Movies</a></li>
+                <li><a href="#">Downloads</a></li>
+            </ul>
+            <form class="navbar-form navbar-right" action="/action_page.php">
+                <div class="input-group">
+                    <input type="text" class="form-control" placeholder="Search" name="search">
+                    <div class="input-group-btn">
+                        <button class="btn btn-default" type="submit">
+                            <i class="glyphicon glyphicon-search"></i>
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </nav>
+    <!-- <div class="container">
+        <div class="panel-group">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <h4 class="panel-title show-title">
+                        <a data-toggle="collapse" href="#show">Show (1992)</a>
+                    </h4>
+                </div>
+                <div id="show" class="panel-collapse collapse">
+                    <div class="panel-group">
+                        <div class="panel panel-default">
+                            <div class="panel-heading">
+                                <h3 class="panel-title season-title">
+                                    <a data-toggle="collapse" href="#collapse1">Season 01</a>
+                                </h3>
+                            </div>
+                            <div id="collapse1" class="panel-collapse collapse">
+                                <ul class="list-group">
+                                    <li class="list-group-item">Episode One</li>
+                                    <li class="list-group-item">Episode Two</li>
+                                    <li class="list-group-item">Episode Three</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel-group">
+                        <div class="panel panel-default">
+                            <div class="panel-heading">
+                                <h4 class="panel-title season-title">
+                                    <a data-toggle="collapse" href="#collapse2">Season 02</a>
+                                </h4>
+                            </div>
+                            <div id="collapse2" class="panel-collapse collapse">
+                                <ul class="list-group">
+                                    <li class="list-group-item">Episode One</li>
+                                    <li class="list-group-item">Episode Two</li>
+                                    <li class="list-group-item">Episode Three</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div> -->
+
+    <h4 class="panel-title show-title">
+        <a data-toggle="collapse" href="#show">Show (1992)</a>
+    </h4>
+
+    <div id="show" class="collapse">
+        <h3 class="panel-title season-title">
+            <a data-toggle="collapse" href="#collapse1">Season 01</a>
+        </h3>
+        <div id="collapse1" class="collapse">
+            <!-- <ul class="list-group">
+                <li class="list-group-item">Episode One</li>
+                <li class="list-group-item">Episode Two</li>
+                <li class="list-group-item">Episode Three</li>
+            </ul> -->
+            <div class="container">
+                <div class="row">
+                  <div class="col">
+                   <div class="p-3 border bg-light">Custom column padding</div>
+                  </div>
+                  <div class="col">
+                    <div class="p-3 border bg-light">Custom column padding</div>
+                  </div>
+                </div>
+              </div>
+        </div>
+
+
+        <h4 class="panel-title season-title">
+            <a data-toggle="collapse" href="#collapse2">Season 02</a>
+        </h4>
+        <!-- <div id="collapse2" class="panel-collapse collapse"> -->
+        <div id="collapse2" class="collapse">
+            <ul class="list-group">
+                <li class="list-group-item">Episode One</li>
+                <li class="list-group-item">Episode Two</li>
+                <li class="list-group-item">Episode Three</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- <p>
+        <a class="btn btn-primary" data-toggle="collapse" href="#collapseExample" role="button" aria-expanded="false"
+            aria-controls="collapseExample">
+            Link with href
+        </a>
+        <button class="btn btn-primary" type="button" data-toggle="collapse" data-target="#collapseExample"
+            aria-expanded="false" aria-controls="collapseExample">
+            Button with data-target
+        </button>
+    </p> -->
+    <!-- <div class="collapse" id="collapseExample">
+        <div class="card card-body">
+            Anim pariatur cliche reprehenderit, enim eiusmod high life accusamus terry richardson ad squid. Nihil anim
+            keffiyeh helvetica, craft beer labore wes anderson cred nesciunt sapiente ea proident.
+        </div>
+    </div> -->
+
+    <!-- <div class="accordion" id="accordionExample">
+        <div class="card">
+          <div class="card-header" id="headingOne">
+            <h5 class="mb-0">
+              <button class="btn btn-link" type="button" data-toggle="collapse" data-target="#collapseOne" aria-expanded="true" aria-controls="collapseOne">
+                Collapsible Group Item #1
+              </button>
+            </h5>
+          </div>
+
+          <div id="collapseOne" class="collapse show" aria-labelledby="headingOne" data-parent="#accordionExample">
+            <div class="card-body">
+              Anim pariatur cliche reprehenderit, enim eiusmod high life accusamus terry richardson ad squid. 3 wolf moon officia aute, non cupidatat skateboard dolor brunch. Food truck quinoa nesciunt laborum eiusmod. Brunch 3 wolf moon tempor, sunt aliqua put a bird on it squid single-origin coffee nulla assumenda shoreditch et. Nihil anim keffiyeh helvetica, craft beer labore wes anderson cred nesciunt sapiente ea proident. Ad vegan excepteur butcher vice lomo. Leggings occaecat craft beer farm-to-table, raw denim aesthetic synth nesciunt you probably haven't heard of them accusamus labore sustainable VHS.
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header" id="headingTwo">
+            <h5 class="mb-0">
+              <button class="btn btn-link collapsed" type="button" data-toggle="collapse" data-target="#collapseTwo" aria-expanded="false" aria-controls="collapseTwo">
+                Collapsible Group Item #2
+              </button>
+            </h5>
+          </div>
+          <div id="collapseTwo" class="collapse" aria-labelledby="headingTwo" data-parent="#accordionExample">
+            <div class="card-body">
+              Anim pariatur cliche reprehenderit, enim eiusmod high life accusamus terry richardson ad squid. 3 wolf moon officia aute, non cupidatat skateboard dolor brunch. Food truck quinoa nesciunt laborum eiusmod. Brunch 3 wolf moon tempor, sunt aliqua put a bird on it squid single-origin coffee nulla assumenda shoreditch et. Nihil anim keffiyeh helvetica, craft beer labore wes anderson cred nesciunt sapiente ea proident. Ad vegan excepteur butcher vice lomo. Leggings occaecat craft beer farm-to-table, raw denim aesthetic synth nesciunt you probably haven't heard of them accusamus labore sustainable VHS.
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header" id="headingThree">
+            <h5 class="mb-0">
+              <button class="btn btn-link collapsed" type="button" data-toggle="collapse" data-target="#collapseThree" aria-expanded="false" aria-controls="collapseThree">
+                Collapsible Group Item #3
+              </button>
+            </h5>
+          </div>
+          <div id="collapseThree" class="collapse" aria-labelledby="headingThree" data-parent="#accordionExample">
+            <div class="card-body">
+              Anim pariatur cliche reprehenderit, enim eiusmod high life accusamus terry richardson ad squid. 3 wolf moon officia aute, non cupidatat skateboard dolor brunch. Food truck quinoa nesciunt laborum eiusmod. Brunch 3 wolf moon tempor, sunt aliqua put a bird on it squid single-origin coffee nulla assumenda shoreditch et. Nihil anim keffiyeh helvetica, craft beer labore wes anderson cred nesciunt sapiente ea proident. Ad vegan excepteur butcher vice lomo. Leggings occaecat craft beer farm-to-table, raw denim aesthetic synth nesciunt you probably haven't heard of them accusamus labore sustainable VHS.
+            </div>
+          </div>
+        </div>
+      </div> -->
+
+</body>
+</html>

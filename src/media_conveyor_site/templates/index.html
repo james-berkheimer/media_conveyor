@@ -1,0 +1,22 @@
+<!-- templates/base.html -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>{% block title %}Redis Testing{% endblock title %}</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css">
+    <style>
+        body {
+            background-color: #313131;
+            color: #e8e8e8; /* Light grey color for text */
+        }
+    </style>
+</head>
+<body class="container">
+{% block page_content %}{% endblock page_content %}
+<div><a href="{% url 'media' %}">Go to Media</a></div>
+<div><a href="{% url 'tmp' %}">Go to Tmp</a></div>
+<div><a href="{% url 'main' %}">Go to Main Page</a></div>
+</body>
+</html>

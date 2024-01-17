@@ -14,7 +14,7 @@ class RedisPlexDB(StrictRedis):
     plex_db: Dict[str, str]
 
     def __init__(
-        self, plex_db: Dict[str, str] = None, host: str = "localhost", port: int = 9000, decode_responses: bool = True
+        self, plex_db: Dict[str, str] = None, host: str = "localhost", port: int = 6379, decode_responses: bool = True
     ) -> None:
         if not host:
             raise ValueError("Host must be provided")

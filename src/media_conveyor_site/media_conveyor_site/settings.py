@@ -17,6 +17,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 MEDIA_ROOT = BASE_DIR / "media/"
 MEDIA_URL = "media/"
 
+# Static files (CSS, JavaScript, Images)
+# STATIC_ROOT = BASE_DIR / "static/"
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
@@ -34,8 +37,12 @@ REDIS_HOST = "localhost"
 REDIS_PORT = 6379
 
 # Plex defenitions
-PLEX_SERVER_IP = "<IP>"
-PLEX_SERVER_PORT = "<PORT>"
+PLEX_SERVER_IP = "192.168.1.42"  # "<IP>"
+PLEX_SERVER_PORT = 32400  # "<PORT>"
+
+# Files defenitions
+MEDIA_ROOT = BASE_DIR / "media/"
+MEDIA_URL = "media/"
 
 
 # Application definition
@@ -68,7 +75,7 @@ ROOT_URLCONF = "media_conveyor_site.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -129,7 +136,7 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 
-STATIC_URL = "static/"
+STATIC_URL = "/static/"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field

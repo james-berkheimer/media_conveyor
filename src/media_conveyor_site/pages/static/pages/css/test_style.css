@@ -1,0 +1,38 @@
+body {
+    background-color: #2b2b2b;
+    color: #d3d3d3;
+}
+
+.navbar {
+    background-color: #1a1a1a;
+}
+
+.navbar .nav-link {
+    color: #d3d3d3;
+}
+
+.navbar .nav-link:hover {
+    color: #ffffff;
+}
+
+.sidebar-header {
+    background-color: #1a1a1a;
+    color: #d3d3d3;
+}
+
+.list-unstyled {
+    background-color: #1a1a1a;
+}
+
+.list-unstyled a {
+    color: #d3d3d3;
+}
+
+.list-unstyled a:hover {
+    color: #ffffff;
+}
+
+#content {
+    background-color: #2b2b2b;
+    color: #d3d3d3;
+}
