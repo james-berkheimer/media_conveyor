@@ -168,6 +168,7 @@ aws_state.json
 tmp*.py
 version.py
 credentials.json
+configurations.json
 .copilot
 *.pem
 
