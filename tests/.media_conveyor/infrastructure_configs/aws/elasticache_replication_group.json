@@ -4,7 +4,6 @@
     "AutomaticFailoverEnabled": false,
     "MultiAZEnabled": false,
     "Engine": "redis",
-    // "EngineVersion": "7.1",  // Redis version
     "CacheNodeType": "cache.t2.micro",
     "NumNodeGroups": 1,
     "ReplicasPerNodeGroup": 0,

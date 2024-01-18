@@ -1,10 +1,8 @@
 import copy
 import os
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 import boto3
-import json5
 from botocore.exceptions import BotoCoreError, ClientError
 
 from .logging import setup_logger
@@ -13,26 +11,15 @@ logger = setup_logger()
 
 
 class Authentication:
-    def __init__(self, auth_data: Optional[Dict[str, Any]] = None) -> None:
-        media_conveyor = os.getenv("MEDIA_CONVEYOR")
-        if not media_conveyor:
-            raise ValueError("MEDIA_CONVEYOR environment variable not set")
-
-        media_conveyor_path = Path(media_conveyor)
-        if not media_conveyor_path.exists():
-            raise ValueError(f"Credentials file not found: {media_conveyor_path}")
-
-        self.auth_file_path = media_conveyor_path / "credentials.json"
-        self.auth_data = auth_data if auth_data is not None else self._resolve_auth()
+    def __init__(self) -> None:
+        logger.info("Starting authentication process")
+        self.auth_data = self._resolve_auth()
+        if not self.auth_data:
+            raise ValueError("Authentication data could not be resolved from environment variables.")
         logger.info(f"Authentication initialized with auth_data: {self._mask_auth_data()}")
 
     def _resolve_auth(self) -> Dict[str, Any]:
-        if not os.path.exists(self.auth_file_path):
-            logger.error(f"Credentials file not found: {self.auth_file_path}")
-            raise ValueError(f"Credentials file not found: {self.auth_file_path}")
-
-        with open(self.auth_file_path) as auth_file:
-            return json5.load(auth_file)
+        raise NotImplementedError("Subclasses should implement this!")
 
     def _mask_auth_data(self) -> Dict[str, Any]:
         # Mask sensitive data in auth_data for logger
@@ -45,15 +32,25 @@ class Authentication:
 
 
 class PlexAuthentication(Authentication):
-    def __init__(self, baseurl: Optional[str] = None, token: Optional[str] = None) -> None:
-        if baseurl and token:
-            auth_data = {"plex": {"baseurl": baseurl, "token": token}}
-        else:
-            auth_data = None
-            logger.warning("No auth data provided for PlexAuthentication, falling back to credentials.json")
-
-        super().__init__(auth_data=auth_data)
+    def __init__(self) -> None:
+        super().__init__()
         logger.info("PlexAuthentication initialized")
+
+    def _resolve_auth(self) -> Dict[str, Any]:
+        baseurl = os.getenv("PLEX_BASEURL")
+        token = os.getenv("PLEX_TOKEN")
+        if not baseurl:
+            logger.error("PLEX_BASEURL environment variable is not set.")
+        if not token:
+            logger.error("PLEX_TOKEN environment variable is not set.")
+        if not baseurl or not token:
+            raise ValueError("PLEX_BASEURL and PLEX_TOKEN environment variables must be set.")
+        return {
+            "plex": {
+                "baseurl": baseurl,
+                "token": token,
+            }
+        }
 
     @property
     def baseurl(self) -> str:
@@ -65,50 +62,40 @@ class PlexAuthentication(Authentication):
 
 
 class AWSCredentials(Authentication):
-    def __init__(
-        self,
-        access_key_id: Optional[str] = None,
-        secret_access_key: Optional[str] = None,
-        region_name: Optional[str] = None,
-    ) -> None:
-        if access_key_id and secret_access_key and region_name:
-            auth_data = {
-                "aws": {
-                    "access_key_id": access_key_id,
-                    "secret_access_key": secret_access_key,
-                    "region_name": region_name,
-                }
-            }
-        else:
-            auth_data = None
-            logger.info("No auth data provided for AWSCredentials, falling back to credentials.json")
-
-        super().__init__(auth_data=auth_data)
+    def __init__(self) -> None:
+        super().__init__()
         logger.info("AWSCredentials initialized")
 
-    def load(self) -> None:
-        os.environ["AWS_ACCESS_KEY_ID"] = self.auth_data["aws"]["access_key_id"]
-        os.environ["AWS_SECRET_ACCESS_KEY"] = self.auth_data["aws"]["secret_access_key"]
-        os.environ["AWS_DEFAULT_REGION"] = self.auth_data["aws"]["region_name"]
-        logger.info("AWS credentials loaded")
-        self.verify_credentials()
+    def _resolve_auth(self) -> Dict[str, Any]:
+        access_key_id = os.getenv("AWS_ACCESS_KEY_ID")
+        secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+        region_name = os.getenv("AWS_DEFAULT_REGION")
+        if not access_key_id:
+            logger.error("AWS_ACCESS_KEY_ID environment variable is not set.")
+        if not secret_access_key:
+            logger.error("AWS_SECRET_ACCESS_KEY environment variable is not set.")
+        if not region_name:
+            logger.error("AWS_DEFAULT_REGION environment variable is not set.")
+        if not access_key_id or not secret_access_key or not region_name:
+            raise ValueError(
+                "AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_DEFAULT_REGION environment variables must be set."
+            )
+        return {
+            "aws": {
+                "access_key_id": access_key_id,
+                "secret_access_key": secret_access_key,
+                "region_name": region_name,
+            }
+        }
 
-    def verify_credentials(self, aws_access_key_id=None, aws_secret_access_key=None, region_name=None):
-        # If no arguments are provided, use the instance's auth_data
-        if aws_access_key_id is None:
-            aws_access_key_id = self.auth_data["aws"]["access_key_id"]
-        if aws_secret_access_key is None:
-            aws_secret_access_key = self.auth_data["aws"]["secret_access_key"]
-        if region_name is None:
-            region_name = self.auth_data["aws"]["region_name"]
-
+    def verify_credentials(self):
         try:
             logger.info("Verifying AWS credentials")
             # Create a session using your credentials
             session = boto3.Session(
-                aws_access_key_id=aws_access_key_id,
-                aws_secret_access_key=aws_secret_access_key,
-                region_name=region_name,
+                aws_access_key_id=self.auth_data["aws"]["access_key_id"],
+                aws_secret_access_key=self.auth_data["aws"]["secret_access_key"],
+                region_name=self.auth_data["aws"]["region_name"],
             )
 
             # Create an EC2 resource object using the session
@@ -123,4 +110,4 @@ class AWSCredentials(Authentication):
         except (BotoCoreError, ClientError) as e:
             logger.error("AWS credentials are not valid.")
             logger.error("Error: %s", e)
-            return False
+            raise e

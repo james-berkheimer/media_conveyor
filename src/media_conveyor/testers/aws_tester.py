@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import sys
@@ -6,7 +7,6 @@ from pathlib import Path
 from pprint import pprint
 
 import boto3
-from botocore.exceptions import ParamValidationError
 
 from ..authentication import AWSCredentials
 from ..configurations import AWSConfigs
@@ -14,24 +14,17 @@ from ..infrastructure import AWSResourceCreator, AWSStateData
 from ..logging import setup_logger
 
 setup_logger(level="INFO")
+aws_config = AWSConfigs()
 
 media_conveyor_root = Path.home() / ".media_conveyor"
 project_root = Path(__file__).resolve().parent.parent.parent.parent
 os.environ["MEDIA_CONVEYOR"] = str(project_root / "tests/.media_conveyor")
 credentials = AWSCredentials()
-credentials.load()
+credentials.verify_credentials()
 
 
 def aws_run():
-    # Step 1: Configure logging to print to the console
-    # logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler()])
-    # print("Hello, world!")
-    # ec2_client = boto3.client("ec2")
-    # ec2_client.describe_regions()
-    # response = ec2_client.describe_instances()
-    # print(response.get("Reservations", []))
-
-    aws_config = AWSConfigs()
+    # aws_config = AWSConfigs()
     resource_configs = aws_config.resolve_state()
     # pprint(resource_configs)
     state_manager = AWSResourceCreator(resource_configs=resource_configs)
@@ -41,7 +34,7 @@ def aws_run():
 def aws_stop():
     # logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler()])
 
-    aws_config = AWSConfigs()
+    # aws_config = AWSConfigs()
     resource_configs = aws_config.resolve_state()
     state_manager = AWSResourceCreator(resource_configs=resource_configs)
     state_manager.terminate_state()
@@ -62,52 +55,20 @@ def aws_test():
     pass
 
 
-def _is_dependent(sg):
-    ec2_client = boto3.client("ec2")
-    sg_id = sg["GroupId"]
+def aws_state():
+    with open("/home/james/code/media_conveyor/tests/.media_conveyor/aws_state.json", "r") as file:
+        aws_state = json.load(file)
 
-    # Get the inbound rules
-    inbound_rules = ec2_client.describe_security_group_rules(Filters=[{"Name": "group-id", "Values": [sg_id]}])[
-        "SecurityGroupRules"
-    ]
+    ec2 = boto3.resource("ec2")
+    elasticache = boto3.client("elasticache")
 
-    # Check if any inbound rule references another security group
-    for rule in inbound_rules:
-        if "ReferencedGroupId" in rule:
-            return True
+    # Check the status of EC2 instances
+    for instance_id in aws_state["InstanceIds"]:
+        instance = ec2.Instance(id=instance_id)
+        print(f'EC2 Instance {instance_id}: {instance.state["Name"]}')
 
-    # Get the security group details
-    sg_details = ec2_client.describe_security_groups(GroupIds=[sg_id])["SecurityGroups"][0]
-
-    # Get the outbound rules
-    outbound_rules = sg_details["IpPermissionsEgress"]
-
-    # Check if any outbound rule references another security group
-    for rule in outbound_rules:
-        if "UserIdGroupPairs" in rule:
-            for pair in rule["UserIdGroupPairs"]:
-                if "GroupId" in pair:
-                    return True
-
-    # If no inbound or outbound rule references another security group, then the security group is not dependent
-    return False
-
-
-def verify_credentials(aws_access_key_id, aws_secret_access_key, region_name):
-    try:
-        # Create a session using your credentials
-        session = boto3.Session(
-            aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key, region_name=region_name
-        )
-
-        # Create an EC2 resource object using the session
-        ec2_resource = session.resource("ec2")
-
-        # Use the EC2 resource object to make a request
-        # This will throw an exception if the credentials are not valid
-        ec2_resource.instances.all().limit(1)
-
-        print("Credentials are valid.")
-    except Exception as e:
-        print("Credentials are not valid.")
-        print("Error:", e)
+    # Check the status of the cache cluster
+    cache_cluster_id = aws_state["CacheClusterId"]
+    response = elasticache.describe_cache_clusters(CacheClusterId=cache_cluster_id)
+    cache_cluster = response["CacheClusters"][0]
+    print(f'Cache Cluster {cache_cluster_id}: {cache_cluster["CacheClusterStatus"]}')

@@ -13,19 +13,6 @@ from ..authentication import PlexAuthentication
 from ..logging import setup_logger
 from ..plex_data import PlexData
 
-# from .plex_data import PlexMovies
-
-# TODO Temporarily setting the environment variable here for dev purposes
-# os.environ["MEDIA_CONVEYOR"] = f"{Path.home()}/.media_conveyor"
-
-cwd = os.getcwd()
-
-# logger = logging.getLogger(__name__)
-
-print(os.getenv("MEDIA_CONVEYOR"))
-plex_auth = PlexAuthentication()
-plex_data = PlexData(plex_auth.baseurl, plex_auth.token)
-
 random.seed(444)
 hats = {
     f"hat:{random.getrandbits(32)}": i
@@ -64,7 +51,7 @@ def get_db():
 
 def main():
     plex_auth = PlexAuthentication()
-    PlexData(plex_auth.baseurl, plex_auth.token)
+    plex_data = PlexData(plex_auth.baseurl, plex_auth.token)
 
     db = plex_data.compile_libraries(movies=True)
     # db = plex_data.compile_libraries(shows=True)
