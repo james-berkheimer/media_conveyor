@@ -48,10 +48,8 @@ MEDIA_URL = "media/"
 # Application definition
 
 INSTALLED_APPS = [
-    "authentication",
-    "file_handling",
     "pages",
-    "thumbnailer",
+    "testing",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",

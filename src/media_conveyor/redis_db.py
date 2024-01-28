@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+import json
 from typing import Dict
 
 from redis import ConnectionError, RedisError, StrictRedis, TimeoutError
@@ -14,7 +14,11 @@ class RedisPlexDB(StrictRedis):
     plex_db: Dict[str, str]
 
     def __init__(
-        self, plex_db: Dict[str, str] = None, host: str = "localhost", port: int = 6379, decode_responses: bool = True
+        self,
+        plex_db: Dict[str, str] = None,
+        host: str = "localhost",
+        port: int = 6379,
+        decode_responses: bool = True,
     ) -> None:
         if not host:
             raise ValueError("Host must be provided")
@@ -30,6 +34,10 @@ class RedisPlexDB(StrictRedis):
         try:
             with self.pipeline() as pipe:
                 for key_id, value_data in self.plex_db.items():
+                    # print(f"key_id type: {type(key_id)}")
+                    # print(f"value data type: {type(value_data)}")
+                    # print(f"Key: {key_id}, Value: {value_data}")
+                    # serialized_value_data = json.dumps(value_data)
                     pipe.hset(key_id, mapping=value_data)
                 pipe.execute()
             logger.info("Database created successfully")

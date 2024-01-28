@@ -1,0 +1,133 @@
+{
+  "tv_shows:Lodge49:2018": {
+    "title": "Lodge 49",
+    "year": 2018,
+    "thumb_path": "/library/metadata/175351/thumb/1702116292",
+    "episodes": {
+      "season:1": {
+        "episode:1": {
+          "episode_name": "As Above, So Below",
+          "episode_files": {
+            "/mnt/Media/Television/amc/lodge_49/season_01/lodge_49_s01e01.mkv": 4097592752
+          }
+        },
+        "episode:2": {
+          "episode_name": "Moments of Truth in Service",
+          "episode_files": {
+            "/mnt/Media/Television/amc/lodge_49/season_01/lodge_49_s01e02.mkv": 4030653674
+          }
+        },
+        "episode:3": {
+          "episode_name": "Corpus",
+          "episode_files": {
+            "/mnt/Media/Television/amc/lodge_49/season_01/lodge_49_s01e03.mkv": 4125841260
+          }
+        },
+        "episode:4": {
+          "episode_name": "Sunday",
+          "episode_files": {
+            "/mnt/Media/Television/amc/lodge_49/season_01/lodge_49_s01e04.mkv": 3915918588
+          }
+        },
+        "episode:5": {
+          "episode_name": "Paradise",
+          "episode_files": {
+            "/mnt/Media/Television/amc/lodge_49/season_01/lodge_49_s01e05.mkv": 4048655845
+          }
+        },
+        "episode:6": {
+          "episode_name": "The Mysteries",
+          "episode_files": {
+            "/mnt/Media/Television/amc/lodge_49/season_01/lodge_49_s01e06.mkv": 4103394048
+          }
+        },
+        "episode:7": {
+          "episode_name": "The Solemn Duty of the Squire",
+          "episode_files": {
+            "/mnt/Media/Television/amc/lodge_49/season_01/lodge_49_s01e07.mkv": 3828166654
+          }
+        },
+        "episode:8": {
+          "episode_name": "Something from Nothing",
+          "episode_files": {
+            "/mnt/Media/Television/amc/lodge_49/season_01/lodge_49_s01e08.mkv": 4029146282
+          }
+        },
+        "episode:9": {
+          "episode_name": "Apogee",
+          "episode_files": {
+            "/mnt/Media/Television/amc/lodge_49/season_01/lodge_49_s01e09.mkv": 4076051144
+          }
+        },
+        "episode:10": {
+          "episode_name": "Full Fathom Five",
+          "episode_files": {
+            "/mnt/Media/Television/amc/lodge_49/season_01/lodge_49_s01e10.mkv": 4475920010
+          }
+        }
+      },
+      "season:2": {
+        "episode:1": {
+          "episode_name": "All Circles Vanish",
+          "episode_files": {
+            "/mnt/Media/Television/amc/lodge_49/season_02/lodge_49_s02e01.mkv": 1924791902
+          }
+        },
+        "episode:2": {
+          "episode_name": "The Slide",
+          "episode_files": {
+            "/mnt/Media/Television/amc/lodge_49/season_02/lodge_49_s02e02.mkv": 1850882755
+          }
+        },
+        "episode:3": {
+          "episode_name": "DisOrientation",
+          "episode_files": {
+            "/mnt/Media/Television/amc/lodge_49/season_02/lodge_49_s02e03.mkv": 1996563930
+          }
+        },
+        "episode:4": {
+          "episode_name": "Conjunctio",
+          "episode_files": {
+            "/mnt/Media/Television/amc/lodge_49/season_02/lodge_49_s02e04.mkv": 1835066964
+          }
+        },
+        "episode:5": {
+          "episode_name": "Estrella y Mar",
+          "episode_files": {
+            "/mnt/Media/Television/amc/lodge_49/season_02/lodge_49_s02e05.mkv": 1806421921
+          }
+        },
+        "episode:6": {
+          "episode_name": "Circles",
+          "episode_files": {
+            "/mnt/Media/Television/amc/lodge_49/season_02/lodge_49_s02e06.mkv": 1853771518
+          }
+        },
+        "episode:7": {
+          "episode_name": "Exile",
+          "episode_files": {
+            "/mnt/Media/Television/amc/lodge_49/season_02/lodge_49_s02e07.mkv": 1849510642
+          }
+        },
+        "episode:8": {
+          "episode_name": "Zugzwang",
+          "episode_files": {
+            "/mnt/Media/Television/amc/lodge_49/season_02/lodge_49_s02e08.mkv": 1781149970
+          }
+        },
+        "episode:9": {
+          "episode_name": "Le Reve Impossible",
+          "episode_files": {
+            "/mnt/Media/Television/amc/lodge_49/season_02/lodge_49_s02e09.mkv": 1786185269
+          }
+        },
+        "episode:10": {
+          "episode_name": "The Door",
+          "episode_files": {
+            "/mnt/Media/Television/amc/lodge_49/season_02/lodge_49_s02e10.mkv": 1811521257
+          }
+        }
+      }
+    }
+  }
+}

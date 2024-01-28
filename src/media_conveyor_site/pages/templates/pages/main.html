@@ -3,11 +3,12 @@
 <html>
 
 <head>
+    {% load static %}
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
 
-    <title>Collapsible sidebar using Bootstrap 4</title>
+    <title>Media Conveyor</title>
 
 
     <!-- Bootstrap CSS CDN -->
@@ -20,6 +21,7 @@
     <!-- Font Awesome JS -->
     <script defer src="https://use.fontawesome.com/releases/v5.0.13/js/solid.js" integrity="sha384-tzzSw1/Vo+0N5UhStP3bvwWPq+uvzCMfrN1fEFe+xBmv1C/AtVX5K0uZtmcHitFZ" crossorigin="anonymous"></script>
     <script defer src="https://use.fontawesome.com/releases/v5.0.13/js/fontawesome.js" integrity="sha384-6OIrr52G08NpOFSZdxxz1xdNSndlD4vdcf/q2myIUVO0VsqaGHJsB0RaBE01VTOY" crossorigin="anonymous"></script>
+
 
 </head>
 
@@ -42,7 +44,7 @@
                     <ul class="collapse list-unstyled" id="pageSubmenu">
                         {% for media_type in media_types %}
                             <li>
-                                <a href="#">{{ media_type }}</a>
+                                <a href="#" data-media-type="{{ media_type.0 }}">{{ media_type.1 }}</a>
                             </li>
                         {% endfor %}
                     </ul>
@@ -73,19 +75,24 @@
             </nav>
 
             <!-- Add Media here -->
-            <div>
+            <div id="media_container">
 
             </div>
+
 
         </div>
     </div>
 
-    <!-- jQuery CDN - Slim version (=without AJAX) -->
-    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
+    <!-- jQuery CDN -->
+    <script src="https://code.jquery.com/jquery-3.3.1.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script>
     <!-- Popper.JS -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.0/umd/popper.min.js" integrity="sha384-cs/chFZiN24E4KMATLdqdvsezGxaGsi4hLGOzlXwp5UZB1LY//20VyM2taTB4QvJ" crossorigin="anonymous"></script>
     <!-- Bootstrap JS -->
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.0/js/bootstrap.min.js" integrity="sha384-uefMccjFJAIv6A+rW+L4AHf99KvxDjWSu1z9VI8SKNVmz4sk7buKt/6v9KI65qnm" crossorigin="anonymous"></script>
+    <!-- Handlebars.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/handlebars.js/4.7.7/handlebars.min.js"></script>
+    <!-- Our Custom Scripts -->
+    <script src="{% static 'pages/js/media_container.js' %}"></script>
 
     <script type="text/javascript">
         $(document).ready(function () {
@@ -97,3 +104,18 @@
 </body>
 
 </html>
+
+
+
+<!-- {% for media_item in media.values %}
+    <div class="list-row">
+        <div class="thumbnail">
+            <img src="{{ media_item.thumbnail_url }}" alt="{{ media_item.title }} Thumbnail">
+        </div>
+        <div class="details">
+            <div class="title">{{ media_item.title }}</div>
+            <div class="year">Year: {{ media_item.year }}</div>
+            <div class="description">{{ media_item.description }}</div>
+        </div>
+    </div>
+{% endfor %} -->

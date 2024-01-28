@@ -34,7 +34,10 @@ def write():
 
     plex_auth = PlexAuthentication()
     plex_data = PlexData(plex_auth.baseurl, plex_auth.token)
-    plex_db = plex_data.compile_libraries(movies=True, shows=True, db_slice=slice(585, 589))
+    plex_db = plex_data.compile_libraries(shows=True, title_filter="Light and Dark")
+    # plex_db = plex_data.compile_libraries(movies=True, shows=True, title_filter="The Matrix")
+    # plex_db = plex_data.compile_libraries(movies=True, shows=True, db_slice=slice(585, 589))
+    # plex_db = plex_data.compile_libraries(movies=True, db_slice=slice(585, 589))
     redis_client = RedisPlexDB(plex_db=plex_db)
     redis_client.make_db()
 

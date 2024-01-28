@@ -1,0 +1,70 @@
+{
+    "artist:New Young Pony Club": {
+      "artist": "NewYoungPonyClub",
+      "thumb_path": "/library/metadata/18743/thumb/1705000163",
+      "tracks": {
+        "album:The Optimist:2010": {
+          "track:1": {
+            "track_name": "Lost a Girl",
+            "track_files": {
+              "/mnt/Media/Music/New Young Pony/The Optimist/01 Lost A Girl.mp3": 10660594
+            }
+          },
+          "track:2": {
+            "track_name": "Chaos",
+            "track_files": {
+              "/mnt/Media/Music/New Young Pony/The Optimist/02 Chaos.mp3": 8910384
+            }
+          },
+          "track:3": {
+            "track_name": "The Optimist",
+            "track_files": {
+              "/mnt/Media/Music/New Young Pony/The Optimist/03 The Optimist.mp3": 13516301
+            }
+          },
+          "track:4": {
+            "track_name": "Stone",
+            "track_files": {
+              "/mnt/Media/Music/New Young Pony/The Optimist/04 Stone.mp3": 10029085
+            }
+          },
+          "track:5": {
+            "track_name": "We Want To",
+            "track_files": {
+              "/mnt/Media/Music/New Young Pony/The Optimist/05 We Want To.mp3": 11460871
+            }
+          },
+          "track:6": {
+            "track_name": "Dolls",
+            "track_files": {
+              "/mnt/Media/Music/New Young Pony/The Optimist/06 Dolls.mp3": 8024197
+            }
+          },
+          "track:7": {
+            "track_name": "Before the Light",
+            "track_files": {
+              "/mnt/Media/Music/New Young Pony/The Optimist/07 Before The Light.mp3": 13273775
+            }
+          },
+          "track:8": {
+            "track_name": "Oh Cherie",
+            "track_files": {
+              "/mnt/Media/Music/New Young Pony/The Optimist/08 Oh Cherie.mp3": 12325001
+            }
+          },
+          "track:9": {
+            "track_name": "Rapture",
+            "track_files": {
+              "/mnt/Media/Music/New Young Pony/The Optimist/09 Rapture.mp3": 10698093
+            }
+          },
+          "track:10": {
+            "track_name": "Architect of Love",
+            "track_files": {
+              "/mnt/Media/Music/New Young Pony/The Optimist/10 Architect Of Love.mp3": 11682397
+            }
+          }
+        }
+      }
+    }
+  }

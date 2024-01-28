@@ -174,3 +174,6 @@ configurations.json
 
 # Ruff
 .ruff_cache/
+
+# Copilot
+.copilot/

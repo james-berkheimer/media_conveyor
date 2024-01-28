@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-# import json5 as json
 import json
+import os
 import re
-import time
+from enum import Enum
 from pathlib import Path
 
 from plexapi.exceptions import BadRequest, NotFound
@@ -14,49 +14,48 @@ from .logging import setup_logger
 logger = setup_logger()
 
 
+class MediaType(Enum):
+    MOVIE = "movie"
+    ARTIST = "artist"
+    SHOW = "show"
+
+
 class PlexData(PlexServer):
     NON_ALPHANUMERIC = re.compile(r"[^a-zA-Z0-9]")
 
     def __init__(self, baseurl=None, token=None, session=None, timeout=None):
+        self.local_media_path = os.getenv("PATHS_LOCAL_MEDIA")
         self._movies_db = None
         self._shows_db = None
-        self._music_db = None
-        try:
-            super().__init__(baseurl, token, session, timeout)
-            self._movie_sections = self._get_sections("movie")
-            self._shows_sections = self._get_sections("show")
-            self._music_sections = self._get_sections("artist")
-            logger.info("PlexData initialized successfully")
-        except BadRequest as e:
-            logger.error(f"Failed to initialize PlexData due to bad request: {e}")
-            raise
-        except NotFound as e:
-            logger.error(f"Failed to initialize PlexData due to resource not found: {e}")
-            raise
-        except Exception as e:
-            logger.critical(f"Failed to initialize PlexData due to unexpected error: {e}")
-            raise
+        self._artists_db = None  # Add this line
+        super().__init__(baseurl, token, session, timeout)
+        self._movie_sections = self._get_sections(MediaType.MOVIE)
+        self._shows_sections = self._get_sections(MediaType.SHOW)
+        self._artist_sections = self._get_sections(MediaType.ARTIST)
+        logger.info("PlexData initialized successfully")
 
-    def _get_sections(self, section_type):
-        try:
-            sections = [
-                section for section in self.library.sections() if section.type == section_type
-            ]
-            logger.debug(f"Retrieved {len(sections)} {section_type} sections")
-            return sections
-        except BadRequest as e:
-            logger.error(f"Failed to get sections of type {section_type} due to bad request: {e}")
-            raise
-        except NotFound as e:
-            logger.error(
-                f"Failed to get sections of type {section_type} due to resource not found: {e}"
-            )
-            raise
-        except Exception as e:
-            logger.critical(
-                f"Failed to get sections of type {section_type} due to unexpected error: {e}"
-            )
-            raise
+    def handle_exceptions(func):  # noqa: N805
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except BadRequest as e:
+                logger.error(f"Failed to execute {func.__name__} due to bad request: {e}")
+                raise
+            except NotFound as e:
+                logger.error(f"Failed to execute {func.__name__} due to resource not found: {e}")
+                raise
+            except Exception as e:
+                logger.critical(f"Failed to execute {func.__name__} due to unexpected error: {e}")
+                raise
+
+        return wrapper
+
+    @handle_exceptions
+    def _get_sections(self, section_type: MediaType):
+        sections = [
+            section for section in self.library.sections() if section.type == section_type.value
+        ]
+        return sections
 
     def _movies(self) -> list:
         movies = [movie for section in self._movie_sections for movie in section.all()]
@@ -65,180 +64,209 @@ class PlexData(PlexServer):
 
     def _shows(self) -> dict:
         shows_dict = {section.title: list(section.all()) for section in self._shows_sections}
-        for title, shows in shows_dict.items():
-            logger.info(f"Retrieved {len(shows)} shows from '{title}' section")
+        logger.info(f"Retrieved {sum(len(shows) for shows in shows_dict.values())} shows")
         return shows_dict
 
-    def _music(self) -> list:
-        music = [music for section in self._music_sections for music in section.all()]
-        logger.info(f"Retrieved {len(music)} music")
-        return music
+    def _artists(self) -> list:
+        artists = [artist for section in self._artist_sections for artist in section.all()]
+        logger.info(f"Retrieved {len(artists)} artists")
+        return artists
+
+    def _process_movie_data(self, data):
+        year = data.year or "empty"
+        files = json.dumps(self._get_file_data(data.media) if data.media else "empty")
+        return year, files
+
+    def _process_artist_data(self, data):
+        # Assuming that the artist data does not have year and files information
+        # Return "empty" for these values
+        return ("empty", "empty")
+
+    def _process_show_data(self, data):
+        year = data.year or "empty"
+        return (year,)
+
+    def _process_data(self, data=None, media_type: MediaType = None) -> tuple:
+        title = data.title or "empty"
+        name = self.NON_ALPHANUMERIC.sub("", title).strip()
+        thumb = data.thumb or "empty"
+
+        process_data_functions = {
+            MediaType.MOVIE: self._process_movie_data,
+            MediaType.ARTIST: self._process_artist_data,
+            MediaType.SHOW: self._process_show_data,
+        }
+
+        if media_type in process_data_functions:
+            extra_data = process_data_functions[media_type](data)
+            return title, thumb, name, *extra_data
+
+        raise ValueError(f"Unknown media type: {media_type}")
+
+    def _get_file_data(self, media):
+        file_data = {}
+        for m in media:
+            parts = m.parts
+            for part in parts:
+                fixed_file_path = part.file.replace("/media", self.local_media_path, 1)
+                file_data[fixed_file_path] = part.size
+        return file_data
 
     @property
     def get_movies_db(self) -> dict:
         if self._movies_db is None:
             self._movies_db = {}
             for movie in self._movies():
-                movie_title = movie.title or "empty"
-                movie_year = movie.year or "empty"
-                movie_thumb = movie.thumb or "empty"
-                movie_paths = movie.locations or "empty"
-                if movie_paths != "empty":
-                    movie_paths = [path.replace("/media", "", 1) for path in movie_paths]
-                    movie_paths = str(";".join(movie_paths))
-
-                movie_name = self.NON_ALPHANUMERIC.sub("", movie.title).strip()
+                movie_title, movie_thumb, movie_name, movie_year, movie_paths = self._process_data(
+                    movie,
+                    media_type=MediaType.MOVIE,
+                )
                 db = {
                     "title": movie_title,
                     "year": movie_year,
                     "file_path": movie_paths,
                     "thumb_path": movie_thumb,
                 }
-                self._movies_db[f"movie:{movie_name}:{movie.year}"] = db
-                logger.debug(f"Added movie {movie_title} to the database")
+                self._movies_db[f"movie:{movie_name}:{movie_year}"] = db
             logger.info("Generated movies database")
-        return self._movies_db
+            return self._movies_db
 
     @property
     def get_shows_db(self) -> dict:
         if self._shows_db is None:
             self._shows_db = {}
-            total_get_episodes_time = 0
-            total_json_dumps_time = 0
             for section_title, shows in self._shows().items():
                 section_name = section_title.lower().replace(" ", "_")
                 for show in shows:
-                    show_name = self.NON_ALPHANUMERIC.sub("", show.title).strip()
-                    show_title = show.title or "empty"
-                    show_year = show.year or "empty"
-                    show_thumb = show.thumb or "empty"
+                    show_title, show_thumb, show_name, show_year = self._process_data(
+                        show, media_type=MediaType.SHOW
+                    )
 
-                    start_time = time.time()
                     episodes = self._get_episodes(show)
-                    end_time = time.time()
-                    total_get_episodes_time += end_time - start_time
-
-                    start_time = time.time()
                     serialized_episodes = json.dumps(episodes)
-                    end_time = time.time()
-                    total_json_dumps_time += end_time - start_time
 
                     db = {
                         "title": show_title,
                         "year": show_year,
                         "thumb_path": show_thumb,
-                        "show_location": show.locations[0],
                         "episodes": serialized_episodes,
                     }
 
                     self._shows_db[f"{section_name}:{show_name}:{show.year}"] = db
-                    logger.debug(f"Added show {show_title} to the database")
-
-            logger.debug(f"_get_episodes took a total of {total_get_episodes_time} seconds")
-            logger.debug(f"json.dumps took a total of {total_json_dumps_time} seconds")
             logger.info("Generated Shows database")
-        return self._shows_db
+            return self._shows_db
 
+    @handle_exceptions
     def _get_episodes(self, show) -> dict:
-        if show.seasons():
+        if show and show.seasons():
             episode_dict = {}
             for season in show.seasons():
                 episode_dict[f"season:{season.seasonNumber}"] = {}
                 for episode in season.episodes():
-                    episode_paths = episode.locations or "empty"
-                    if episode_paths != "empty":
-                        episode_paths = [path.replace("/media", "", 1) for path in episode_paths]
-                        episode_paths = str(";".join(episode_paths))
+                    episode_media = episode.media or "empty"
+                    try:
+                        episode_files = json.dumps(self._get_file_data(episode_media))
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to get file data for episode {episode.episodeNumber} of season {season.seasonNumber} for show {show.title}: {e}"
+                        )
+                        continue
                     episode_dict[f"season:{season.seasonNumber}"][
                         f"episode:{episode.episodeNumber}"
                     ] = {
                         "episode_name": episode.title,
-                        "episode_filename": episode_paths,
+                        "episode_files": episode_files,
                     }
             return episode_dict
         else:
             return {}
 
     @property
-    def get_music_db(self) -> dict:
-        if self._music_db is None:
-            self._music_db = {}
-            for artist in self._music():
-                artist_title = artist.title or "empty"
-                artist_thumb = artist.thumb or "empty"
-                artist_name = self.NON_ALPHANUMERIC.sub("", artist_title).strip()
+    def get_artists_db(self) -> dict:
+        if self._artists_db is None:
+            self._artists_db = {}
+            for artist in self._artists():
+                artist_name, artist_thumb, artist_title, _, _ = self._process_data(
+                    artist, media_type=MediaType.ARTIST
+                )
                 db = {
                     "artist": artist_title,
                     "thumb": artist_thumb,
-                    # _get_tracks returns a dict.  Redis will not take a dict as a
-                    # value and so the dict needs to be serialized.
                     "tracks": json.dumps(self._get_tracks(artist)),
                 }
-                self._music_db[f"artist:{artist_name}"] = db
-                logger.debug(f"Added artist {artist_title} to the database")
-        logger.info("Generated music database")
-        return self._music_db
+                self._artists_db[f"artist:{artist_name}"] = db
+            logger.info("Generated artists database")
+            logger.info(f"Size of database: {len(self._artists_db)}")
+            return self._artists_db
 
+    @handle_exceptions
     def _get_tracks(self, artist) -> dict:
-        if artist.albums():
-            track_db = {}
+        if artist and artist.albums():
+            album_dict = {}
             for album in artist.albums():
+                album_dict[f"album:{album.title}:{album.year}"] = {}
                 for track in album.tracks():
                     track_number = track.trackNumber or "empty"
                     track_name = track.title or "empty"
-                    track_location = track.locations or "empty"
-                    if track_location != "empty":
-                        track_location = [path.replace("/media", "", 1) for path in track_location]
-                        track_location = str(";".join(track_location))
-                    track_db[f"{album.title}:{album.year}"] = {
-                        "track_number": track_number,
+                    try:
+                        track_files = json.dumps(self._get_file_data(track.media))
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to get file data for track {track_number} of album {album.title} for artist {artist.title}: {e}"
+                        )
+                        continue
+                    album_dict[f"album:{album.title}:{album.year}"][f"track:{track_number}"] = {
                         "track_name": track_name,
-                        "track_location": track_location,
+                        "track_files": track_files,
                     }
-            return track_db
+            return album_dict
         else:
             return {}
 
+    def search(self, query, libtype=None, **kwargs):
+        """
+        Search for a specific item in the Plex library.
+
+        Parameters:
+        query (str): The search query.
+        libtype (str, optional): The type of library to search in. Defaults to None.
+        **kwargs: Additional keyword arguments for the search function.
+
+        Returns:
+        list: A list of matching items from the Plex library.
+        """
+        return self.library.search(query, libtype, **kwargs)
+
     def compile_libraries(
-        self, movies=False, shows=False, music=False, db_slice: slice = None
+        self,
+        movies=False,
+        artists=False,
+        shows=False,
+        db_slice: slice = None,
+        title_filter: str = "",
     ) -> dict:
         libraries_db = {}
-        try:
-            if movies:
-                movies_db = self.get_movies_db
-                if db_slice:
-                    libraries_db.update({k: movies_db[k] for k in list(movies_db.keys())[db_slice]})
-                    logger.debug(f"Added movies to libraries with slice: {db_slice}")
-                else:
-                    libraries_db.update(movies_db)
-                    logger.debug("Added movies to libraries")
 
-            if shows:
-                shows_db = self.get_shows_db
-                if db_slice:
-                    libraries_db.update({k: shows_db[k] for k in list(shows_db.keys())[db_slice]})
-                    logger.debug(f"Added shows to libraries with slice: {db_slice}")
-                else:
-                    libraries_db.update(shows_db)
-                    logger.debug("Added shows to libraries")
+        def add_to_library(media_type_db):
+            if db_slice:
+                libraries_db.update(
+                    {
+                        k: media_type_db[k]
+                        for k in list(media_type_db.keys())[db_slice]
+                        if title_filter in media_type_db[k]["title"]
+                    }
+                )
+            else:
+                libraries_db.update(
+                    {k: v for k, v in media_type_db.items() if title_filter in v["title"]}
+                )
 
-            if music:
-                music_db = self.get_music_db
-                if db_slice:
-                    libraries_db.update({k: music_db[k] for k in list(music_db.keys())[db_slice]})
-                    logger.debug(f"Added music to libraries with slice: {db_slice}")
-                else:
-                    libraries_db.update(music_db)
-                    logger.debug("Added music to libraries")
+        if movies:
+            add_to_library(self.get_movies_db)
+        if artists:
+            add_to_library(self.get_artists_db)
+        if shows:
+            add_to_library(self.get_shows_db)
 
-            logger.info("Libraries packaged")
-            return libraries_db
-        except BadRequest as e:
-            logger.error(f"Failed to package libraries due to bad request: {e}")
-            raise
-        except NotFound as e:
-            logger.error(f"Failed to package libraries due to resource not found: {e}")
-            raise
-        except Exception as e:
-            logger.critical(f"Failed to package libraries due to unexpected error: {e}")
-            raise
+        logger.info("Libraries packaged")
+        return libraries_db
